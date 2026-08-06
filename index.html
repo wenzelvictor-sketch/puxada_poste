@@ -138,6 +138,25 @@
   #compareTable th{ font-size:11px; }
   #compareTable td{ padding:8px 12px; font-size:13px; }
   #compareTable tr.best td{ background:var(--accent-soft); }
+
+  .chart-legend{ display:flex; flex-wrap:wrap; gap:18px; margin-top:14px; font-size:12.5px; color:var(--muted); }
+  .chart-legend .li{ display:flex; align-items:center; gap:7px; }
+  .chart-legend .sw{ width:16px; height:0; border-top-width:2.5px; border-top-style:solid; }
+  .chart-legend .sw.c-actual{ border-top-color:var(--text); }
+  .chart-legend .sw.c-gbm{ border-top-color:var(--accent); }
+  .chart-legend .sw.c-es{ border-top-color:var(--accent2); }
+
+  .mchart-grid{ stroke:var(--line-soft); }
+  .mchart-axis-text{ fill:var(--muted); }
+  .mchart-divider{ stroke:var(--line); }
+  .mchart-actual-line{ stroke:var(--text); }
+  .mchart-actual-dot{ fill:var(--text); }
+  .mchart-gbm-line{ stroke:var(--accent); }
+  .mchart-gbm-dot{ fill:var(--accent); }
+  .mchart-es-line{ stroke:var(--accent2); }
+  .mchart-es-dot{ fill:var(--accent2); }
+  .mchart-h1-text{ fill:var(--accent); }
+  .mchart-h2-text{ fill:var(--accent2); }
   .use-combo-btn{
     font-family:var(--mono); font-size:11px; background:transparent; border:1px solid var(--line);
     color:var(--text); padding:5px 10px; border-radius:3px; cursor:pointer;
@@ -349,7 +368,17 @@
 
   <!-- ============ RESULTS ============ -->
   <section id="resultsSection">
-    <div class="sec-head"><span class="sec-num">03</span><span class="sec-title">Panorama da base</span></div>
+    <div class="sec-head"><span class="sec-num">02b</span><span class="sec-title">Puxada mensal — histórico e projeções</span></div>
+    <div class="card">
+      <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
+        Total de puxada por mês (soma de todos os combos do escopo atual). As duas últimas marcações são as projeções de cada modelo
+        para D+30 e D+60, a partir do último mês real.
+      </p>
+      <div id="monthlyChartWrap"></div>
+      <div class="chart-legend" id="monthlyChartLegend"></div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">03</span><span class="sec-title">Panorama da base</span></div>
     <div class="kpi-grid" id="kpiGrid"></div>
 
     <div class="sec-head" style="margin-top:38px;"><span class="sec-num">04</span><span class="sec-title">Desempenho do modelo</span></div>
@@ -1178,6 +1207,20 @@ async function trainAndForecast(stockRaw, cartasRaw, contratosRaw, classRaw, opt
   const topErrors30 = buildTopErrors(h1.errorDetail, contratosIndexForErrors, 10);
   const topErrors60 = buildTopErrors(h2.errorDetail, contratosIndexForErrors, 10);
 
+  // série mensal real (soma de todos os combos do escopo) + projeções agregadas dos dois modelos
+  const monthlyMap = new Map();
+  panel.forEach(r => { monthlyMap.set(r.ym, (monthlyMap.get(r.ym) || 0) + r.puxada_t); });
+  const monthlyActual = Array.from(monthlyMap.entries()).sort((a,b)=>a[0]-b[0]).map(([ym,total]) => ({ ym, total }));
+  const totalGbm30 = forecastRows.reduce((s,r)=>s+r.prev_30d,0);
+  const totalGbm60 = forecastRows.reduce((s,r)=>s+r.prev_60d,0);
+  const totalEs30 = forecastRows.reduce((s,r)=>s+r.es_30d,0);
+  const totalEs60 = forecastRows.reduce((s,r)=>s+r.es_60d,0);
+  const chartData = {
+    monthlyActual, curYm, h1Ym, h2Ym,
+    gbm: { h1: totalGbm30, h2: totalGbm60 },
+    es: { h1: totalEs30, h2: totalEs60 },
+  };
+
   // referência: pedidos já parcialmente lançados para o mês D+30, se existirem na base
   let partialH1 = 0;
   cartasAgg.forEach((v,k)=>{ if (k.endsWith('|'+h1Ym)) partialH1 += v; });
@@ -1186,7 +1229,7 @@ async function trainAndForecast(stockRaw, cartasRaw, contratosRaw, classRaw, opt
 
   return {
     featCols, totalBefore, totalAfter, curYm, h1Ym, h2Ym, h1, h2, forecastRows, partialH1, params, supplierBreakdown,
-    classBreakdown, classFornecedorRows, holt, topErrors30, topErrors60,
+    classBreakdown, classFornecedorRows, holt, topErrors30, topErrors60, chartData,
     nCombos: cur.length, histMin: Math.min(...panel.map(r=>r.ym)), histMax: curYm
   };
 }
@@ -1218,6 +1261,71 @@ async function compareHyperparams(stockRaw, cartasRaw, opts, combos, progressCb)
 /* ======================================================================
    RENDERIZAÇÃO
    ====================================================================== */
+function buildMonthlyChartSvg(chartData){
+  const { monthlyActual, curYm, h1Ym, h2Ym, gbm, es } = chartData;
+  const w = 900, h = 300, padL = 54, padR = 20, padT = 16, padB = 40;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+
+  const xMin = monthlyActual[0].ym, xMax = h2Ym;
+  const yVals = monthlyActual.map(d=>d.total).concat([gbm.h1, gbm.h2, es.h1, es.h2]);
+  const yMax = Math.max(...yVals) * 1.15 || 1;
+  const X = ym => padL + (ym - xMin) / (xMax - xMin || 1) * innerW;
+  const Y = v => padT + innerH - (v / yMax) * innerH;
+
+  let gridLines = '';
+  const nTicksY = 4;
+  for (let i=0; i<=nTicksY; i++){
+    const v = yMax * i / nTicksY;
+    const y = Y(v);
+    gridLines += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" class="mchart-grid" stroke-width="1"/>`;
+    gridLines += `<text x="${padL-8}" y="${y+4}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="10" class="mchart-axis-text">${fmtInt(v)}</text>`;
+  }
+
+  const lastActual = monthlyActual[monthlyActual.length-1];
+  const actualPoints = monthlyActual.map(d=>`${X(d.ym)},${Y(d.total)}`).join(' ');
+  const gbmPoints = `${X(lastActual.ym)},${Y(lastActual.total)} ${X(h1Ym)},${Y(gbm.h1)} ${X(h2Ym)},${Y(gbm.h2)}`;
+  const esPoints = `${X(lastActual.ym)},${Y(lastActual.total)} ${X(h1Ym)},${Y(es.h1)} ${X(h2Ym)},${Y(es.h2)}`;
+
+  const step = Math.max(1, Math.ceil(monthlyActual.length/7));
+  let xLabels = '';
+  monthlyActual.forEach((d,i) => {
+    if (i % step === 0 || i === monthlyActual.length-1){
+      xLabels += `<text x="${X(d.ym)}" y="${h-padB+18}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" class="mchart-axis-text">${ymLabel(d.ym)}</text>`;
+    }
+  });
+  xLabels += `<text x="${X(h1Ym)}" y="${h-padB+18}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" font-weight="600" class="mchart-h1-text">${ymLabel(h1Ym)}</text>`;
+  xLabels += `<text x="${X(h2Ym)}" y="${h-padB+18}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" font-weight="600" class="mchart-h2-text">${ymLabel(h2Ym)}</text>`;
+
+  const actualDots = monthlyActual.map(d=>`<circle cx="${X(d.ym)}" cy="${Y(d.total)}" r="2.2" class="mchart-actual-dot"/>`).join('');
+  const dividerX = X(lastActual.ym);
+
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block; overflow:visible;">
+    ${gridLines}
+    <line x1="${dividerX}" y1="${padT}" x2="${dividerX}" y2="${h-padB}" class="mchart-divider" stroke-width="1" stroke-dasharray="3,3"/>
+    <polyline points="${actualPoints}" fill="none" class="mchart-actual-line" stroke-width="2"/>
+    <polyline points="${gbmPoints}" fill="none" class="mchart-gbm-line" stroke-width="2" stroke-dasharray="6,4"/>
+    <polyline points="${esPoints}" fill="none" class="mchart-es-line" stroke-width="2" stroke-dasharray="6,4"/>
+    ${actualDots}
+    <circle cx="${X(h1Ym)}" cy="${Y(gbm.h1)}" r="3.5" class="mchart-gbm-dot"/>
+    <circle cx="${X(h2Ym)}" cy="${Y(gbm.h2)}" r="3.5" class="mchart-gbm-dot"/>
+    <circle cx="${X(h1Ym)}" cy="${Y(es.h1)}" r="3.5" class="mchart-es-dot"/>
+    <circle cx="${X(h2Ym)}" cy="${Y(es.h2)}" r="3.5" class="mchart-es-dot"/>
+    ${xLabels}
+  </svg>`;
+}
+
+function renderMonthlyChart(run){
+  document.getElementById('monthlyChartWrap').innerHTML = buildMonthlyChartSvg(run.chartData);
+  const legendItems = [
+    { label:'Puxada real (histórico)', cls:'c-actual', dash:false },
+    { label:'Árvore de decisão (previsão)', cls:'c-gbm', dash:true },
+    { label:'Suavização exponencial (previsão)', cls:'c-es', dash:true },
+  ];
+  document.getElementById('monthlyChartLegend').innerHTML = legendItems.map(li => `
+    <span class="li"><span class="sw ${li.cls}" style="border-top-style:${li.dash ? 'dashed' : 'solid'};"></span>${li.label}</span>
+  `).join('');
+}
+
 function renderKpis(run){
   const el = document.getElementById('kpiGrid');
   const items = [
@@ -1349,6 +1457,7 @@ function renderTableBody(rows){
 function renderResults(run){
   lastRun = run;
   document.getElementById('resultsSection').style.display = 'block';
+  renderMonthlyChart(run);
   renderKpis(run);
   renderPerf(run);
   renderModelComparison(run);
