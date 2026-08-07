@@ -153,8 +153,10 @@
   .mchart-actual-dot{ fill:var(--text); }
   .mchart-gbm-line{ stroke:var(--accent); }
   .mchart-gbm-dot{ fill:var(--accent); }
+  .mchart-gbm-dot-hollow{ fill:var(--panel); stroke:var(--accent); stroke-width:1.6; }
   .mchart-es-line{ stroke:var(--accent2); }
   .mchart-es-dot{ fill:var(--accent2); }
+  .mchart-es-dot-hollow{ fill:var(--panel); stroke:var(--accent2); stroke-width:1.6; }
   .mchart-h1-text{ fill:var(--accent); }
   .mchart-h2-text{ fill:var(--accent2); }
   .use-combo-btn{
@@ -218,6 +220,19 @@
     padding:9px 12px; font-family:var(--mono); font-size:13px; min-width:240px;
   }
   .search-input:focus{ border-color:var(--accent); }
+
+  .chart-filter-bar{ padding:20px 26px; }
+  .cf-title{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:12px; }
+  .cf-row{ display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap; }
+  .cf-item{ display:flex; flex-direction:column; gap:6px; min-width:180px; }
+  .cf-item label{ font-size:12px; color:var(--muted); }
+  .cf-item select{
+    background:var(--panel-alt); border:1px solid var(--line); border-radius:var(--radius); color:var(--text);
+    padding:9px 12px; font-family:var(--mono); font-size:13px;
+  }
+  .cf-item select:focus{ border-color:var(--accent); }
+  .cf-item select:disabled{ opacity:.4; cursor:not-allowed; }
+  .cf-note{ font-size:12px; color:var(--muted-2); margin-top:12px; }
   .table-scroll{ max-height:520px; overflow:auto; border:1px solid var(--line); border-radius:var(--radius); }
   thead th{ position:sticky; top:0; background:var(--panel); z-index:1; cursor:pointer; user-select:none; }
   thead th:hover{ color:var(--text); }
@@ -368,7 +383,27 @@
 
   <!-- ============ RESULTS ============ -->
   <section id="resultsSection">
-    <div class="sec-head"><span class="sec-num">02b</span><span class="sec-title">Puxada mensal — histórico e projeções</span></div>
+    <div class="card chart-filter-bar">
+      <div class="cf-title">Filtrar os gráficos abaixo</div>
+      <div class="cf-row">
+        <div class="cf-item">
+          <label for="cfEmpresa">Empresa</label>
+          <select id="cfEmpresa"><option value="Todas">Todas</option></select>
+        </div>
+        <div class="cf-item">
+          <label for="cfRegional">Regional</label>
+          <select id="cfRegional"><option value="Todas">Todas</option></select>
+        </div>
+        <div class="cf-item">
+          <label for="cfFornecedor">Fornecedor</label>
+          <select id="cfFornecedor"><option value="Todos">Todos</option></select>
+        </div>
+        <button class="btn ghost small" id="cfClearBtn" type="button">Limpar filtros</button>
+      </div>
+      <div class="cf-note" id="cfNote"></div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">02b</span><span class="sec-title">Puxada mensal — histórico e projeções</span></div>
     <div class="card">
       <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
         Total de puxada por mês (soma de todos os combos do escopo atual). As duas últimas marcações são as projeções de cada modelo
@@ -376,6 +411,27 @@
       </p>
       <div id="monthlyChartWrap"></div>
       <div class="chart-legend" id="monthlyChartLegend"></div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">02c</span><span class="sec-title">Árvore de decisão — real vs. previsto (mês a mês)</span></div>
+    <div class="card">
+      <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
+        Compara o total real de puxada com o que a árvore de decisão previu para aquele mesmo mês, 30 e 60 dias antes, mês a mês em todo
+        o histórico — mostra o quão perto a previsão fica do real. À esquerda da marcação "holdout" o modelo já tinha visto aqueles meses
+        no treino (tende a acertar mais); à direita são meses nunca vistos, o teste mais realista do modelo.
+      </p>
+      <div id="gbmAccuracyChartWrap"></div>
+      <div class="chart-legend" id="gbmAccuracyChartLegend"></div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">02d</span><span class="sec-title">Suavização exponencial — real vs. previsto (mês a mês)</span></div>
+    <div class="card">
+      <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
+        O mesmo comparativo, agora para o modelo de suavização exponencial — útil para colocar lado a lado com o gráfico acima e ver em
+        quais meses cada modelo chega mais perto do real.
+      </p>
+      <div id="esAccuracyChartWrap"></div>
+      <div class="chart-legend" id="esAccuracyChartLegend"></div>
     </div>
 
     <div class="sec-head" style="margin-top:38px;"><span class="sec-num">03</span><span class="sec-title">Panorama da base</span></div>
@@ -821,7 +877,11 @@ function evaluateHolt(panel, esParams, curYm){
     const cutoff = maxYm - 3;
     const test = df.filter(r => r.ym > cutoff);
     const predTest = test.map(r => Math.max(0, r[esCol]));
-    return { perf: metrics(test.map(r=>r[tcol]), predTest), nTest: test.length };
+    const errorDetail = test.map((r,i) => ({
+      cod_empresa: r.cod_empresa, cod_regional: r.cod_regional, cod_mat: r.cod_mat,
+      ym: r.ym, actual: r[tcol], predicted: predTest[i],
+    }));
+    return { perf: metrics(test.map(r=>r[tcol]), predTest), nTest: test.length, errorDetail };
   }
 
   const h1 = evalHorizon('target_h1', 'es_h1');
@@ -1151,6 +1211,83 @@ async function runHorizon(panel, tcol, featCols, params, progressCb, skipFinal){
   return { perf, importance, finalModel, trainRange, testRange, nTrain: train.length, nTest: test.length, errorDetail };
 }
 
+/* ======================================================================
+   DADOS DOS GRÁFICOS — recalculável sob filtro (empresa/regional/fornecedor)
+   sem precisar retreinar; usa os modelos finais já treinados e os campos
+   já computados no painel (puxada_t, es_h1, es_h2, target_h1, target_h2).
+   ====================================================================== */
+function computeChartDatasets(panel, h1FinalModel, h2FinalModel, contratosIndex, filters){
+  const empresa = (filters && filters.empresa) || 'Todas';
+  const regional = (filters && filters.regional) || 'Todas';
+  const fornecedor = (filters && filters.fornecedor) || 'Todos';
+
+  function weightOf(r){
+    if (empresa !== 'Todas' && r.cod_empresa !== empresa) return 0;
+    if (regional !== 'Todas' && r.cod_regional !== regional) return 0;
+    if (fornecedor !== 'Todos'){
+      if (!contratosIndex) return 0;
+      const list = contratosIndex.get(key3(r.cod_empresa, r.cod_regional, r.cod_mat));
+      if (!list) return 0;
+      const entry = list.find(c => c.nomecdr === fornecedor);
+      return entry ? entry.pct : 0;
+    }
+    return 1;
+  }
+
+  const monthlyMap = new Map();
+  panel.forEach(r => {
+    const wgt = weightOf(r);
+    if (wgt === 0) return;
+    monthlyMap.set(r.ym, (monthlyMap.get(r.ym) || 0) + r.puxada_t*wgt);
+  });
+  const monthlyActual = Array.from(monthlyMap.entries()).sort((a,b)=>a[0]-b[0]).map(([ym,total]) => ({ ym, total }));
+
+  const curYm = Math.max(...panel.map(r=>r.ym));
+  const h1Ym = curYm+1, h2Ym = curYm+2;
+
+  function buildFullHistorySeries(tcol, offset, predictFn){
+    const df = panel.filter(r => r[tcol] !== null && !isNaN(r[tcol]));
+    const map = new Map();
+    df.forEach(r => {
+      const wgt = weightOf(r);
+      if (wgt === 0) return;
+      const ym = r.ym + offset;
+      const predicted = Math.max(0, predictFn(r)) * wgt;
+      if (!map.has(ym)) map.set(ym, { actual:0, predicted:0 });
+      const a = map.get(ym);
+      a.actual += r[tcol]*wgt; a.predicted += predicted;
+    });
+    return Array.from(map.entries()).sort((a,b)=>a[0]-b[0]).map(([ym,v]) => ({ ym, actual:v.actual, predicted:v.predicted }));
+  }
+  function holdoutStartFor(tcol, offset){
+    const df = panel.filter(r => r[tcol] !== null && !isNaN(r[tcol]));
+    const maxYm = Math.max(...df.map(r=>r.ym));
+    return (maxYm - 3) + offset;
+  }
+
+  const gbmPred30 = buildFullHistorySeries('target_h1', 1, r => h1FinalModel.predictRow(r));
+  const gbmPred60 = buildFullHistorySeries('target_h2', 2, r => h2FinalModel.predictRow(r));
+  const esPred30 = buildFullHistorySeries('target_h1', 1, r => r.es_h1);
+  const esPred60 = buildFullHistorySeries('target_h2', 2, r => r.es_h2);
+
+  let gbmH1Total=0, gbmH2Total=0, esH1Total=0, esH2Total=0;
+  panel.filter(r=>r.ym===curYm).forEach(r => {
+    const wgt = weightOf(r);
+    if (wgt === 0) return;
+    gbmH1Total += Math.max(0, h1FinalModel.predictRow(r)) * wgt;
+    gbmH2Total += Math.max(0, h2FinalModel.predictRow(r)) * wgt;
+    esH1Total += Math.max(0, r.es_h1) * wgt;
+    esH2Total += Math.max(0, r.es_h2) * wgt;
+  });
+
+  const holdoutStart = holdoutStartFor('target_h1', 1);
+  return {
+    chartData: { monthlyActual, curYm, h1Ym, h2Ym, gbm:{h1:gbmH1Total,h2:gbmH2Total}, es:{h1:esH1Total,h2:esH2Total} },
+    gbmAccuracyChart: { monthlyActual, pred30: gbmPred30, pred60: gbmPred60, holdoutStart },
+    esAccuracyChart: { monthlyActual, pred30: esPred30, pred60: esPred60, holdoutStart },
+  };
+}
+
 async function trainAndForecast(stockRaw, cartasRaw, contratosRaw, classRaw, opts, params, esParams, progressCb){
   progressCb('Unindo f_stockout e f_relatorio_cartas…', 0.02);
   await sleep(0);
@@ -1203,23 +1340,13 @@ async function trainAndForecast(stockRaw, cartasRaw, contratosRaw, classRaw, opt
     if (supplierBreakdown) classFornecedorRows = buildClasseFornecedorRows(supplierBreakdown.detailRows);
   }
 
-  const contratosIndexForErrors = (contratosRaw && contratosRaw.length) ? buildContratosIndex(contratosRaw) : null;
-  const topErrors30 = buildTopErrors(h1.errorDetail, contratosIndexForErrors, 10);
-  const topErrors60 = buildTopErrors(h2.errorDetail, contratosIndexForErrors, 10);
+  const contratosIndex = (contratosRaw && contratosRaw.length) ? buildContratosIndex(contratosRaw) : null;
+  const topErrors30 = buildTopErrors(h1.errorDetail, contratosIndex, 10);
+  const topErrors60 = buildTopErrors(h2.errorDetail, contratosIndex, 10);
 
-  // série mensal real (soma de todos os combos do escopo) + projeções agregadas dos dois modelos
-  const monthlyMap = new Map();
-  panel.forEach(r => { monthlyMap.set(r.ym, (monthlyMap.get(r.ym) || 0) + r.puxada_t); });
-  const monthlyActual = Array.from(monthlyMap.entries()).sort((a,b)=>a[0]-b[0]).map(([ym,total]) => ({ ym, total }));
-  const totalGbm30 = forecastRows.reduce((s,r)=>s+r.prev_30d,0);
-  const totalGbm60 = forecastRows.reduce((s,r)=>s+r.prev_60d,0);
-  const totalEs30 = forecastRows.reduce((s,r)=>s+r.es_30d,0);
-  const totalEs60 = forecastRows.reduce((s,r)=>s+r.es_60d,0);
-  const chartData = {
-    monthlyActual, curYm, h1Ym, h2Ym,
-    gbm: { h1: totalGbm30, h2: totalGbm60 },
-    es: { h1: totalEs30, h2: totalEs60 },
-  };
+  const { chartData, gbmAccuracyChart, esAccuracyChart } = computeChartDatasets(
+    panel, h1.finalModel, h2.finalModel, contratosIndex, { empresa:'Todas', regional:'Todas', fornecedor:'Todos' }
+  );
 
   // referência: pedidos já parcialmente lançados para o mês D+30, se existirem na base
   let partialH1 = 0;
@@ -1229,7 +1356,8 @@ async function trainAndForecast(stockRaw, cartasRaw, contratosRaw, classRaw, opt
 
   return {
     featCols, totalBefore, totalAfter, curYm, h1Ym, h2Ym, h1, h2, forecastRows, partialH1, params, supplierBreakdown,
-    classBreakdown, classFornecedorRows, holt, topErrors30, topErrors60, chartData,
+    classBreakdown, classFornecedorRows, holt, topErrors30, topErrors60, chartData, gbmAccuracyChart, esAccuracyChart,
+    panel, contratosIndex,
     nCombos: cur.length, histMin: Math.min(...panel.map(r=>r.ym)), histMax: curYm
   };
 }
@@ -1263,6 +1391,9 @@ async function compareHyperparams(stockRaw, cartasRaw, opts, combos, progressCb)
    ====================================================================== */
 function buildMonthlyChartSvg(chartData){
   const { monthlyActual, curYm, h1Ym, h2Ym, gbm, es } = chartData;
+  if (!monthlyActual.length){
+    return `<div style="padding:40px 0; text-align:center; color:var(--muted); font-size:13px;">Sem dados para esta combinação de filtros.</div>`;
+  }
   const w = 900, h = 300, padL = 54, padR = 20, padT = 16, padB = 40;
   const innerW = w - padL - padR, innerH = h - padT - padB;
 
@@ -1324,6 +1455,79 @@ function renderMonthlyChart(run){
   document.getElementById('monthlyChartLegend').innerHTML = legendItems.map(li => `
     <span class="li"><span class="sw ${li.cls}" style="border-top-style:${li.dash ? 'dashed' : 'solid'};"></span>${li.label}</span>
   `).join('');
+}
+
+// gráfico real x previsto mês a mês (só no período de holdout, onde o valor real já é conhecido)
+function buildAccuracyChartSvg(chartData, predCls){
+  const { monthlyActual, pred30, pred60, holdoutStart } = chartData;
+  if (!monthlyActual.length){
+    return `<div style="padding:40px 0; text-align:center; color:var(--muted); font-size:13px;">Sem dados para esta combinação de filtros.</div>`;
+  }
+  const w = 900, h = 300, padL = 54, padR = 20, padT = 16, padB = 40;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+
+  const xMin = monthlyActual[0].ym, xMax = monthlyActual[monthlyActual.length-1].ym;
+  const yVals = monthlyActual.map(d=>d.total).concat(pred30.map(d=>d.predicted)).concat(pred60.map(d=>d.predicted));
+  const yMax = Math.max(...yVals, 1) * 1.15;
+  const X = ym => padL + (ym - xMin) / (xMax - xMin || 1) * innerW;
+  const Y = v => padT + innerH - (v / yMax) * innerH;
+
+  let gridLines = '';
+  const nTicksY = 4;
+  for (let i=0; i<=nTicksY; i++){
+    const v = yMax * i / nTicksY;
+    const y = Y(v);
+    gridLines += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" class="mchart-grid" stroke-width="1"/>`;
+    gridLines += `<text x="${padL-8}" y="${y+4}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="10" class="mchart-axis-text">${fmtInt(v)}</text>`;
+  }
+
+  const actualPoints = monthlyActual.map(d=>`${X(d.ym)},${Y(d.total)}`).join(' ');
+  const pred30Points = pred30.map(d=>`${X(d.ym)},${Y(d.predicted)}`).join(' ');
+  const pred60Points = pred60.map(d=>`${X(d.ym)},${Y(d.predicted)}`).join(' ');
+
+  const step = Math.max(1, Math.ceil(monthlyActual.length/7));
+  let xLabels = '';
+  monthlyActual.forEach((d,i) => {
+    if (i % step === 0 || i === monthlyActual.length-1){
+      xLabels += `<text x="${X(d.ym)}" y="${h-padB+18}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" class="mchart-axis-text">${ymLabel(d.ym)}</text>`;
+    }
+  });
+
+  const actualDots = monthlyActual.map(d=>`<circle cx="${X(d.ym)}" cy="${Y(d.total)}" r="2.2" class="mchart-actual-dot"/>`).join('');
+  const pred30Dots = pred30.map(d=>`<circle cx="${X(d.ym)}" cy="${Y(d.predicted)}" r="3" class="${predCls}-dot"/>`).join('');
+  const pred60Dots = pred60.map(d=>`<circle cx="${X(d.ym)}" cy="${Y(d.predicted)}" r="3.2" class="${predCls}-dot-hollow"/>`).join('');
+
+  const holdoutInRange = holdoutStart >= xMin && holdoutStart <= xMax;
+  const holdoutLine = holdoutInRange
+    ? `<line x1="${X(holdoutStart)}" y1="${padT}" x2="${X(holdoutStart)}" y2="${h-padB}" class="mchart-divider" stroke-width="1" stroke-dasharray="3,3"/>
+       <text x="${X(holdoutStart)+6}" y="${padT+11}" font-family="IBM Plex Mono, monospace" font-size="9" class="mchart-axis-text">holdout ▸</text>`
+    : '';
+
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block; overflow:visible;">
+    ${gridLines}
+    ${holdoutLine}
+    <polyline points="${actualPoints}" fill="none" class="mchart-actual-line" stroke-width="2"/>
+    <polyline points="${pred30Points}" fill="none" class="${predCls}-line" stroke-width="2" stroke-dasharray="6,4"/>
+    <polyline points="${pred60Points}" fill="none" class="${predCls}-line" stroke-width="2" stroke-dasharray="1.5,3.5"/>
+    ${actualDots}
+    ${pred30Dots}
+    ${pred60Dots}
+    ${xLabels}
+  </svg>`;
+}
+
+function renderAccuracyCharts(run){
+  document.getElementById('gbmAccuracyChartWrap').innerHTML = buildAccuracyChartSvg(run.gbmAccuracyChart, 'mchart-gbm');
+  document.getElementById('esAccuracyChartWrap').innerHTML = buildAccuracyChartSvg(run.esAccuracyChart, 'mchart-es');
+
+  const legendFor = (cls) => [
+    { label:'Puxada real', cls:'c-actual', dash:'solid' },
+    { label:'Previsto D+30', cls:cls, dash:'dashed' },
+    { label:'Previsto D+60', cls:cls, dash:'dotted' },
+  ].map(li => `<span class="li"><span class="sw ${li.cls}" style="border-top-style:${li.dash};"></span>${li.label}</span>`).join('');
+
+  document.getElementById('gbmAccuracyChartLegend').innerHTML = legendFor('c-gbm');
+  document.getElementById('esAccuracyChartLegend').innerHTML = legendFor('c-es');
 }
 
 function renderKpis(run){
@@ -1457,7 +1661,9 @@ function renderTableBody(rows){
 function renderResults(run){
   lastRun = run;
   document.getElementById('resultsSection').style.display = 'block';
+  initChartFilters(run);
   renderMonthlyChart(run);
+  renderAccuracyCharts(run);
   renderKpis(run);
   renderPerf(run);
   renderModelComparison(run);
@@ -1466,6 +1672,92 @@ function renderResults(run){
   renderTableBody(run.forecastRows);
   renderSupplierSection(run);
   renderClassSection(run);
+}
+
+/* ======================================================================
+   FILTROS DOS GRÁFICOS (empresa / regional / fornecedor) — recalcula sem retreinar
+   ====================================================================== */
+let empresaRegionaisMap = new Map();
+
+function initChartFilters(run){
+  const empresaSel = document.getElementById('cfEmpresa');
+  const regionalSel = document.getElementById('cfRegional');
+  const fornecedorSel = document.getElementById('cfFornecedor');
+  const note = document.getElementById('cfNote');
+
+  empresaRegionaisMap = new Map();
+  run.panel.forEach(r => {
+    if (!empresaRegionaisMap.has(r.cod_empresa)) empresaRegionaisMap.set(r.cod_empresa, new Set());
+    empresaRegionaisMap.get(r.cod_empresa).add(r.cod_regional);
+  });
+  const empresas = Array.from(empresaRegionaisMap.keys()).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
+  empresaSel.innerHTML = '<option value="Todas">Todas</option>' + empresas.map(e=>`<option value="${e}">${e}</option>`).join('');
+  empresaSel.value = 'Todas';
+
+  populateRegionalOptions('Todas');
+
+  let fornecedores = [];
+  if (run.contratosIndex){
+    const set = new Set();
+    run.contratosIndex.forEach(list => list.forEach(c => set.add(c.nomecdr)));
+    fornecedores = Array.from(set).sort((a,b)=>a.localeCompare(b));
+  }
+  if (fornecedores.length){
+    fornecedorSel.disabled = false;
+    fornecedorSel.innerHTML = '<option value="Todos">Todos</option>' + fornecedores.map(f=>`<option value="${f}">${f}</option>`).join('');
+    note.textContent = '';
+  } else {
+    fornecedorSel.disabled = true;
+    fornecedorSel.innerHTML = '<option value="Todos">Todos</option>';
+    note.textContent = 'Filtro de fornecedor indisponível — suba uma base com a aba f_contratos para ativá-lo.';
+  }
+  fornecedorSel.value = 'Todos';
+
+  function populateRegionalOptions(empresaVal){
+    let regs;
+    if (empresaVal === 'Todas'){
+      const all = new Set();
+      empresaRegionaisMap.forEach(set => set.forEach(r=>all.add(r)));
+      regs = Array.from(all);
+    } else {
+      regs = Array.from(empresaRegionaisMap.get(empresaVal) || []);
+    }
+    regs.sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
+    regionalSel.innerHTML = '<option value="Todas">Todas</option>' + regs.map(r=>`<option value="${r}">${r}</option>`).join('');
+    regionalSel.value = 'Todas';
+  }
+  // expõe pro handler de mudança de empresa
+  initChartFilters._populateRegional = populateRegionalOptions;
+
+  empresaSel.onchange = () => {
+    initChartFilters._populateRegional(empresaSel.value);
+    applyChartFilters();
+  };
+  regionalSel.onchange = applyChartFilters;
+  fornecedorSel.onchange = applyChartFilters;
+  document.getElementById('cfClearBtn').onclick = () => {
+    empresaSel.value = 'Todas';
+    initChartFilters._populateRegional('Todas');
+    fornecedorSel.value = 'Todos';
+    applyChartFilters();
+  };
+}
+
+function applyChartFilters(){
+  if (!lastRun) return;
+  const filters = {
+    empresa: document.getElementById('cfEmpresa').value,
+    regional: document.getElementById('cfRegional').value,
+    fornecedor: document.getElementById('cfFornecedor').value,
+  };
+  const { chartData, gbmAccuracyChart, esAccuracyChart } = computeChartDatasets(
+    lastRun.panel, lastRun.h1.finalModel, lastRun.h2.finalModel, lastRun.contratosIndex, filters
+  );
+  lastRun.chartData = chartData;
+  lastRun.gbmAccuracyChart = gbmAccuracyChart;
+  lastRun.esAccuracyChart = esAccuracyChart;
+  renderMonthlyChart(lastRun);
+  renderAccuracyCharts(lastRun);
 }
 
 function renderTopErrorsTable(bodyId, rows){
