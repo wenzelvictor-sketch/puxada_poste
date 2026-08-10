@@ -283,7 +283,7 @@
       <div class="opts">
         <label class="opt"><input type="checkbox" id="optPoste" checked>
           <span><b>Filtrar apenas SKUs de poste</b><br>mantém só descrições iniciadas em "POSTE"</span></label>
-        <label class="opt"><input type="checkbox" id="optCmm12" checked>
+        <label class="opt"><input type="checkbox" id="optCmm12">
           <span><b>Somente CMM_12 &gt; 0</b><br>remove SKUs sem consumo médio relevante nos últimos 12 meses</span></label>
       </div>
 
@@ -302,11 +302,11 @@
             <div class="feat-group-title">Médias móveis de consumo</div>
             <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="CMM_3" checked><span>CMM_3 <i>— média móvel 3 meses</i></span></label>
             <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="CMM_6" checked><span>CMM_6 <i>— média móvel 6 meses</i></span></label>
-            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="CMM_12" checked><span>CMM_12 <i>— média móvel 12 meses</i></span></label>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="CMM_12"><span>CMM_12 <i>— média móvel 12 meses</i></span></label>
           </div>
           <div class="feat-group">
             <div class="feat-group-title">Estoque e compras</div>
-            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="Estoque_N3" checked><span>Estoque_N3 <i>— estoque de segurança</i></span></label>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="Estoque_N3"><span>Estoque_N3 <i>— estoque de segurança</i></span></label>
             <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="Compra_em_aberto" checked><span>Compra_em_aberto <i>— pedidos abertos com fornecedores</i></span></label>
           </div>
           <div class="feat-group">
@@ -329,8 +329,8 @@
         <div class="hp-title">Hiperparâmetros do modelo</div>
         <div class="hp-grid">
           <div class="hp-item">
-            <div class="hp-label-row"><span>Número de árvores</span><span class="hp-val" id="hpTreesVal">300</span></div>
-            <input type="range" id="hpTrees" min="50" max="500" step="10" value="300">
+            <div class="hp-label-row"><span>Número de árvores</span><span class="hp-val" id="hpTreesVal">150</span></div>
+            <input type="range" id="hpTrees" min="50" max="500" step="10" value="150">
           </div>
           <div class="hp-item">
             <div class="hp-label-row"><span>Profundidade máxima</span><span class="hp-val" id="hpDepthVal">3</span></div>
@@ -341,7 +341,7 @@
             <input type="range" id="hpLr" min="0.01" max="0.30" step="0.01" value="0.05">
           </div>
         </div>
-        <div class="hp-sub">Padrão do modelo validado anteriormente: 300 árvores · profundidade 3 · learning rate 0,05 (subsample fixo em 80%).</div>
+        <div class="hp-sub">Padrão do modelo validado anteriormente: 150 árvores · profundidade 3 · learning rate 0,05 (subsample fixo em 80%).</div>
       </div>
 
       <div class="hp-block">
@@ -664,7 +664,7 @@ const ALL_FEAT_COLS = ['Consumo_M0','Demanda_M0','Demanda_M1','Demanda_M2','Dema
 
 const MONTH_NAMES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 
-const DEFAULT_PARAMS = { nEstimators: 300, maxDepth: 3, lr: 0.05, subsample: 0.8, seed: 42 };
+const DEFAULT_PARAMS = { nEstimators: 150, maxDepth: 3, lr: 0.05, subsample: 0.8, seed: 42 };
 const ES_DEFAULT_PARAMS = { alpha: 0.3, beta: 0.1 };
 
 function getParamsFromUI(){
@@ -1293,7 +1293,7 @@ async function trainAndForecast(stockRaw, cartasRaw, contratosRaw, classRaw, opt
   await sleep(0);
   const { panel, totalBefore, totalAfter, cartasAgg } = buildPanel(stockRaw, cartasRaw, opts);
 
-  const featCols = (opts.featCols && opts.featCols.length) ? opts.featCols : ALL_FEAT_COLS.filter(f=>f!=='Consumo_M0');
+  const featCols = (opts.featCols && opts.featCols.length) ? opts.featCols : DEFAULT_FEAT_SELECTION;
 
   const h1 = await runHorizon(panel, 'target_h1', featCols, params, (msg,frac)=> progressCb(`[30 dias] ${msg}`, 0.05 + 0.32*frac), false);
   const h2 = await runHorizon(panel, 'target_h2', featCols, params, (msg,frac)=> progressCb(`[60 dias] ${msg}`, 0.4 + 0.32*frac), false);
@@ -1367,7 +1367,7 @@ async function trainAndForecast(stockRaw, cartasRaw, contratosRaw, classRaw, opt
    ====================================================================== */
 async function compareHyperparams(stockRaw, cartasRaw, opts, combos, progressCb){
   const { panel } = buildPanel(stockRaw, cartasRaw, opts);
-  const featCols = (opts.featCols && opts.featCols.length) ? opts.featCols : ALL_FEAT_COLS.filter(f=>f!=='Consumo_M0');
+  const featCols = (opts.featCols && opts.featCols.length) ? opts.featCols : DEFAULT_FEAT_SELECTION;
 
   const results = [];
   for (let i=0;i<combos.length;i++){
@@ -2288,7 +2288,7 @@ function updateProgress(stage, frac){
 const featErr = document.getElementById('featErr');
 const featCountEl = document.getElementById('featCount');
 const featChecks = Array.from(document.querySelectorAll('.featChk'));
-const DEFAULT_FEAT_SELECTION = ALL_FEAT_COLS.filter(f => f !== 'Consumo_M0'); // padrão: tudo, exceto Consumo_M0
+const DEFAULT_FEAT_SELECTION = ALL_FEAT_COLS.filter(f => !['Consumo_M0','CMM_12','Estoque_N3'].includes(f)); // padrão validado
 
 function getSelectedFeatures(){
   const checked = new Set(featChecks.filter(el => el.checked).map(el => el.dataset.feat));
