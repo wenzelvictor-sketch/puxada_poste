@@ -1,0 +1,2714 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Previsão de Puxada de Postes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg: #10141c;
+    --bg-grid: #151a24;
+    --panel: #1a2130;
+    --panel-alt: #212a3d;
+    --line: #2b3348;
+    --line-soft: #232b3d;
+    --accent: #dd8b3f;
+    --accent-soft: rgba(221,139,63,.14);
+    --accent2: #7c8db3;
+    --good: #4cb782;
+    --bad: #e0645a;
+    --text: #eef1f7;
+    --muted: #8b93a8;
+    --muted-2: #5d6580;
+    --radius: 3px;
+    --mono: 'IBM Plex Mono', monospace;
+    --disp: 'Barlow Condensed', sans-serif;
+    --body: 'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      repeating-linear-gradient(180deg, transparent 0 39px, var(--line-soft) 39px 40px),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--body);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent);}
+  ::selection{background:var(--accent-soft); color:var(--text);}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+
+  .wrap{max-width:1180px; margin:0 auto; padding:0 24px 80px;}
+
+  /* ---------- header ---------- */
+  header.top{
+    padding:38px 0 0;
+    position:relative;
+  }
+  .eyebrow{
+    font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--accent); display:flex; align-items:center; gap:10px; margin-bottom:10px;
+  }
+  .eyebrow .dot{width:6px;height:6px;background:var(--accent); display:inline-block;}
+  h1{
+    font-family:var(--disp); font-weight:800; text-transform:uppercase;
+    font-size:clamp(32px,5vw,52px); letter-spacing:.01em; margin:0 0 8px; line-height:1.02;
+    color:var(--text);
+  }
+  h1 span{color:var(--accent);}
+  .sub{color:var(--muted); font-size:15.5px; max-width:640px; margin:0 0 26px;}
+
+  .poleline{ width:100%; height:46px; margin-bottom:8px; opacity:.9; }
+  .poleline path, .poleline line{ stroke:var(--line); }
+  .poleline .pole{ stroke:var(--accent2); }
+
+  /* ---------- sections ---------- */
+  section{ margin-top:44px; }
+  .sec-head{ display:flex; align-items:baseline; gap:12px; margin-bottom:16px; }
+  .sec-num{ font-family:var(--mono); color:var(--muted-2); font-size:13px; }
+  .sec-title{ font-family:var(--disp); font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-size:22px; }
+
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:26px;
+  }
+
+  /* ---------- upload ---------- */
+  .dropzone{
+    border:1.5px dashed var(--line); border-radius:var(--radius);
+    padding:36px 24px; text-align:center; cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+    background:var(--panel-alt);
+  }
+  .dropzone:hover, .dropzone.drag{ border-color:var(--accent); background:var(--accent-soft); }
+  .dropzone input{ display:none; }
+  .dz-icon{ margin-bottom:10px; }
+  .dz-title{ font-weight:600; font-size:15.5px; }
+  .dz-sub{ color:var(--muted); font-size:13px; margin-top:4px; }
+  .filename-pill{
+    display:inline-flex; align-items:center; gap:8px; margin-top:14px;
+    font-family:var(--mono); font-size:12.5px; color:var(--text);
+    background:var(--panel); border:1px solid var(--line); padding:6px 12px; border-radius:20px;
+  }
+  .filename-pill .dot{width:6px;height:6px;border-radius:50%;background:var(--good);}
+
+  .opts{ display:flex; flex-wrap:wrap; gap:22px; margin-top:22px; }
+  .opt{ display:flex; align-items:flex-start; gap:9px; font-size:13.5px; color:var(--muted); max-width:280px; }
+  .opt input{ margin-top:3px; accent-color:var(--accent); width:15px; height:15px; flex:none; }
+  .opt b{ color:var(--text); font-weight:600; }
+
+  .btn{
+    font-family:var(--body); font-weight:600; font-size:14px; letter-spacing:.02em;
+    border:none; border-radius:var(--radius); padding:13px 26px; cursor:pointer;
+    background:var(--accent); color:#1a1206; transition:filter .15s ease, transform .05s ease;
+  }
+  .btn:hover:not(:disabled){ filter:brightness(1.08); }
+  .btn:active:not(:disabled){ transform:translateY(1px); }
+  .btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .btn.ghost{
+    background:transparent; color:var(--text); border:1px solid var(--line);
+  }
+  .btn.ghost:hover:not(:disabled){ border-color:var(--accent2); }
+  .btn.small{ padding:9px 16px; font-size:12.5px; }
+
+  .action-row{ margin-top:24px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .err{ color:var(--bad); font-size:13.5px; margin-top:14px; font-family:var(--mono); white-space:pre-wrap; }
+
+  .hp-block{ margin-top:26px; padding-top:22px; border-top:1px solid var(--line); }
+  .feat-block{ margin-top:26px; padding-top:22px; border-top:1px solid var(--line); }
+  .feat-groups{ display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:22px; }
+  .feat-group-title{ font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--accent2); margin-bottom:10px; }
+  .feat-opt{ display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--text); margin-bottom:9px; cursor:pointer; }
+  .feat-opt input{ margin-top:3px; accent-color:var(--accent); width:15px; height:15px; flex:none; }
+  .feat-opt i{ color:var(--muted); font-style:normal; }
+  .feat-actions{ display:flex; align-items:center; gap:10px; margin-top:16px; flex-wrap:wrap; }
+  .feat-count{ font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .hp-title{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:14px; }
+  .hp-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:24px; }
+  .hp-item input[type=range]{ width:100%; accent-color:var(--accent); }
+  .hp-label-row{ display:flex; justify-content:space-between; font-size:13px; color:var(--text); margin-bottom:8px; }
+  .hp-val{ font-family:var(--mono); color:var(--accent); font-weight:600; }
+  .hp-sub{ color:var(--muted-2); font-size:12px; margin-top:14px; }
+
+  #compareTable th{ font-size:11px; }
+  #compareTable td{ padding:8px 12px; font-size:13px; }
+  #compareTable tr.best td{ background:var(--accent-soft); }
+
+  .chart-legend{ display:flex; flex-wrap:wrap; gap:18px; margin-top:14px; font-size:12.5px; color:var(--muted); }
+  .chart-legend .li{ display:flex; align-items:center; gap:7px; }
+  .chart-legend .sw{ width:16px; height:0; border-top-width:2.5px; border-top-style:solid; }
+  .chart-legend .sw.c-actual{ border-top-color:var(--text); }
+  .chart-legend .sw.c-gbm{ border-top-color:var(--accent); }
+  .chart-legend .sw.c-es{ border-top-color:var(--accent2); }
+
+  .mchart-grid{ stroke:var(--line-soft); }
+  .mchart-axis-text{ fill:var(--muted); }
+  .mchart-divider{ stroke:var(--line); }
+  .mchart-actual-line{ stroke:var(--text); }
+  .mchart-actual-dot{ fill:var(--text); }
+  .mchart-gbm-line{ stroke:var(--accent); }
+  .mchart-gbm-dot{ fill:var(--accent); }
+  .mchart-gbm-dot-hollow{ fill:var(--panel); stroke:var(--accent); stroke-width:1.6; }
+  .mchart-es-line{ stroke:var(--accent2); }
+  .mchart-es-dot{ fill:var(--accent2); }
+  .mchart-es-dot-hollow{ fill:var(--panel); stroke:var(--accent2); stroke-width:1.6; }
+  .mchart-h1-text{ fill:var(--accent); }
+  .mchart-h2-text{ fill:var(--accent2); }
+  .use-combo-btn{
+    font-family:var(--mono); font-size:11px; background:transparent; border:1px solid var(--line);
+    color:var(--text); padding:5px 10px; border-radius:3px; cursor:pointer;
+  }
+  .use-combo-btn:hover{ border-color:var(--accent); color:var(--accent); }
+
+  /* ---------- progress ---------- */
+  #progressSection{ display:none; }
+  .prog-label{ display:flex; justify-content:space-between; font-family:var(--mono); font-size:12.5px; color:var(--muted); margin-bottom:8px;}
+  .prog-track{ height:6px; background:var(--line-soft); border-radius:4px; overflow:hidden; }
+  .prog-fill{ height:100%; width:0%; background:var(--accent); transition:width .2s ease; }
+
+  /* ---------- results ---------- */
+  #resultsSection{ display:none; }
+
+  .kpi-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+  .kpi{ background:var(--panel); padding:20px 18px; }
+  .kpi-label{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:8px; }
+  .kpi-value{ font-family:var(--disp); font-size:30px; font-weight:700; color:var(--text); }
+  .kpi-value.accent{ color:var(--accent); }
+  .kpi-note{ font-size:11.5px; color:var(--muted-2); margin-top:4px; }
+
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  thead th{
+    text-align:left; font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--muted); border-bottom:1px solid var(--line); padding:10px 12px; white-space:nowrap;
+  }
+  tbody td{ padding:9px 12px; border-bottom:1px solid var(--line-soft); font-family:var(--mono); }
+  tbody td.txt{ font-family:var(--body); }
+  tbody tr:hover td{ background:var(--panel-alt); }
+  tfoot td{ padding:11px 12px; font-family:var(--mono); font-weight:600; border-top:1px solid var(--line); }
+
+  .perf-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media (max-width:760px){ .perf-grid{ grid-template-columns:1fr; } }
+  .horizon-card{ background:var(--panel-alt); border:1px solid var(--line); border-radius:var(--radius); padding:20px; }
+  .horizon-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .horizon-name{ font-family:var(--disp); font-size:17px; text-transform:uppercase; font-weight:700; }
+  .horizon-month{ font-family:var(--mono); font-size:11.5px; color:var(--accent); background:var(--accent-soft); padding:3px 9px; border-radius:12px; }
+  .metric-row{ display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--line-soft); font-size:13px; }
+  .metric-row:last-of-type{ border-bottom:none; }
+  .metric-row .m-label{ color:var(--muted); }
+  .metric-row .m-val{ font-family:var(--mono); font-weight:600; }
+
+  .imp-bar-row{ display:grid; grid-template-columns:120px 1fr 44px; align-items:center; gap:10px; margin:7px 0; font-size:12px; }
+  .imp-bar-row .imp-label{ color:var(--muted); font-family:var(--mono); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .imp-track{ height:8px; background:var(--line-soft); border-radius:2px; overflow:hidden; }
+  .imp-fill{ height:100%; background:var(--accent2); }
+  .imp-val{ font-family:var(--mono); color:var(--muted); }
+
+  .note-box{
+    background:var(--panel-alt); border-left:3px solid var(--accent); padding:14px 18px;
+    font-size:13px; color:var(--muted); margin-top:16px; border-radius:0 var(--radius) var(--radius) 0;
+  }
+  .note-box b{ color:var(--text); }
+
+  .table-toolbar{ display:flex; justify-content:space-between; align-items:center; gap:14px; margin-bottom:14px; flex-wrap:wrap; }
+  .search-input{
+    background:var(--panel-alt); border:1px solid var(--line); border-radius:var(--radius); color:var(--text);
+    padding:9px 12px; font-family:var(--mono); font-size:13px; min-width:240px;
+  }
+  .search-input:focus{ border-color:var(--accent); }
+
+  .current-model-card{ border-color:var(--accent); }
+  .cm-status{ font-size:13.5px; color:var(--text); line-height:1.6; margin-bottom:16px; }
+  .cm-status b{ color:var(--accent); }
+  .cm-actions{ display:flex; gap:14px; flex-wrap:wrap; }
+
+  .chart-filter-bar{ padding:20px 26px; }
+  .cf-title{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:12px; }
+  .cf-row{ display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap; }
+  .cf-item{ display:flex; flex-direction:column; gap:6px; min-width:180px; }
+  .cf-item label{ font-size:12px; color:var(--muted); }
+  .cf-item select{
+    background:var(--panel-alt); border:1px solid var(--line); border-radius:var(--radius); color:var(--text);
+    padding:9px 12px; font-family:var(--mono); font-size:13px;
+  }
+  .cf-item select:focus{ border-color:var(--accent); }
+  .cf-item select:disabled{ opacity:.4; cursor:not-allowed; }
+  .cf-note{ font-size:12px; color:var(--muted-2); margin-top:12px; }
+  .table-scroll{ max-height:520px; overflow:auto; border:1px solid var(--line); border-radius:var(--radius); }
+  thead th{ position:sticky; top:0; background:var(--panel); z-index:1; cursor:pointer; user-select:none; }
+  thead th:hover{ color:var(--text); }
+  thead th.sorted::after{ content:' ▾'; color:var(--accent); }
+  thead th.sorted.asc::after{ content:' ▴'; color:var(--accent); }
+
+  footer{ margin-top:70px; padding-top:24px; border-top:1px solid var(--line); color:var(--muted-2); font-size:12px; font-family:var(--mono); }
+
+  .num-right{ text-align:right; }
+  .hl{ color:var(--accent); font-weight:600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow"><span class="dot"></span> MOTOR DE PREVISÃO &middot; SUPPLY CHAIN</div>
+    <h1>Puxada de Postes<br><span>D+30 / D+60</span></h1>
+    <p class="sub">Suba a base mensal (mesma query: f_stockout e f_relatorio_cartas) e o modelo é retreinado do zero, na hora, direto no navegador — sem enviar dados para nenhum servidor.</p>
+    <svg class="poleline" viewBox="0 0 1180 46" preserveAspectRatio="none">
+      <line x1="0" y1="14" x2="1180" y2="14" stroke-width="1"/>
+      <line x1="0" y1="22" x2="1180" y2="22" stroke-width="1"/>
+      <g class="pole" stroke-width="2">
+        <line x1="60" y1="4" x2="60" y2="40"/><line x1="46" y1="10" x2="74" y2="10"/>
+        <line x1="360" y1="4" x2="360" y2="40"/><line x1="346" y1="10" x2="374" y2="10"/>
+        <line x1="660" y1="4" x2="660" y2="40"/><line x1="646" y1="10" x2="674" y2="10"/>
+        <line x1="960" y1="4" x2="960" y2="40"/><line x1="946" y1="10" x2="974" y2="10"/>
+      </g>
+    </svg>
+  </header>
+
+  <!-- ============ MODELO ATUAL (pré-treinado ou já treinado nesta sessão) ============ -->
+  <section id="currentModelSection" style="display:none;">
+    <div class="sec-head"><span class="sec-num">00</span><span class="sec-title">Modelo atual</span></div>
+    <div class="card current-model-card">
+      <div class="cm-status" id="cmStatus"></div>
+      <div class="cm-actions">
+        <button class="btn" id="cmQuickBtn">Atualizar previsão com este modelo</button>
+        <button class="btn ghost" id="cmRetrainBtn">Treinar um modelo novo do zero</button>
+      </div>
+      <div class="cm-quick-upload" id="cmQuickUpload" style="display:none;">
+        <p style="color:var(--muted); font-size:13px; margin:14px 0 10px;">
+          Suba a base atualizada (mesma estrutura de sempre). As árvores do modelo <b style="color:var(--text)">não são retreinadas</b> —
+          só a previsão, os gráficos e as segregações são recalculados com os dados novos. Muito mais rápido que o treino completo.
+        </p>
+        <div class="dropzone" id="cmDropzone">
+          <input type="file" id="cmFileInput" accept=".xlsx,.xls">
+          <div class="dz-title" style="font-size:13.5px;">Arraste o arquivo .xlsx aqui ou clique para escolher</div>
+          <div id="cmFileNamePill"></div>
+        </div>
+        <div class="action-row">
+          <button class="btn" id="cmRunBtn" disabled>Gerar previsão com o modelo atual</button>
+          <span id="cmStatusText" style="color:var(--muted); font-size:13px;"></span>
+        </div>
+        <div class="err" id="cmErrBox"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ UPLOAD ============ -->
+  <section id="uploadSection">
+    <div class="sec-head"><span class="sec-num">01</span><span class="sec-title">Base de dados</span></div>
+    <div class="card">
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+        <div class="dz-icon">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#8b93a8" stroke-width="1.6">
+            <path d="M12 3v12m0-12 4 4m-4-4-4 4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+          </svg>
+        </div>
+        <div class="dz-title">Arraste o arquivo .xlsx aqui ou clique para escolher</div>
+        <div class="dz-sub">Precisa conter as abas <b style="color:#eef1f7">f_stockout</b> e <b style="color:#eef1f7">f_relatorio_cartas</b></div>
+        <div id="fileNamePill"></div>
+      </div>
+
+      <div class="opts">
+        <label class="opt"><input type="checkbox" id="optPoste" checked>
+          <span><b>Filtrar apenas SKUs de poste</b><br>mantém só descrições iniciadas em "POSTE"</span></label>
+        <label class="opt"><input type="checkbox" id="optCmm12">
+          <span><b>Somente CMM_12 &gt; 0</b><br>remove SKUs sem consumo médio relevante nos últimos 12 meses</span></label>
+      </div>
+
+      <div class="feat-block">
+        <div class="hp-title">Variáveis explicativas do modelo</div>
+        <div class="feat-groups">
+          <div class="feat-group">
+            <div class="feat-group-title">Consumo e demanda</div>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="Consumo_M0"><span>Consumo_M0 <i>— consumo do mês atual</i></span></label>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="Demanda_M0" checked><span>Demanda_M0 <i>— demanda do mês atual</i></span></label>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="Demanda_M1" checked><span>Demanda_M1 <i>— demanda projetada M+1</i></span></label>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="Demanda_M2" checked><span>Demanda_M2 <i>— demanda projetada M+2</i></span></label>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="Demanda_M3" checked><span>Demanda_M3 <i>— demanda projetada M+3</i></span></label>
+          </div>
+          <div class="feat-group">
+            <div class="feat-group-title">Médias móveis de consumo</div>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="CMM_3" checked><span>CMM_3 <i>— média móvel 3 meses</i></span></label>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="CMM_6" checked><span>CMM_6 <i>— média móvel 6 meses</i></span></label>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="CMM_12"><span>CMM_12 <i>— média móvel 12 meses</i></span></label>
+          </div>
+          <div class="feat-group">
+            <div class="feat-group-title">Estoque e compras</div>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="Estoque_N3"><span>Estoque_N3 <i>— estoque de segurança</i></span></label>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="Compra_em_aberto" checked><span>Compra_em_aberto <i>— pedidos abertos com fornecedores</i></span></label>
+          </div>
+          <div class="feat-group">
+            <div class="feat-group-title">Puxada histórica (autorregressiva)</div>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="puxada_t" checked><span>puxada_t <i>— puxada do mês atual</i></span></label>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="puxada_lag1" checked><span>puxada_lag1 <i>— puxada do mês anterior</i></span></label>
+            <label class="feat-opt"><input type="checkbox" class="featChk" data-feat="puxada_lag2" checked><span>puxada_lag2 <i>— puxada de 2 meses atrás</i></span></label>
+          </div>
+        </div>
+        <div class="feat-actions">
+          <button class="btn ghost small" id="featAllBtn" type="button">Marcar todas</button>
+          <button class="btn ghost small" id="featNoneBtn" type="button">Desmarcar todas</button>
+          <button class="btn ghost small" id="featResetBtn" type="button">Restaurar padrão</button>
+          <span class="feat-count" id="featCount"></span>
+        </div>
+        <div class="err" id="featErr" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="hp-block">
+        <div class="hp-title">Hiperparâmetros do modelo</div>
+        <div class="hp-grid">
+          <div class="hp-item">
+            <div class="hp-label-row"><span>Número de árvores</span><span class="hp-val" id="hpTreesVal">150</span></div>
+            <input type="range" id="hpTrees" min="50" max="500" step="10" value="150">
+          </div>
+          <div class="hp-item">
+            <div class="hp-label-row"><span>Profundidade máxima</span><span class="hp-val" id="hpDepthVal">3</span></div>
+            <input type="range" id="hpDepth" min="2" max="6" step="1" value="3">
+          </div>
+          <div class="hp-item">
+            <div class="hp-label-row"><span>Learning rate</span><span class="hp-val" id="hpLrVal">0,05</span></div>
+            <input type="range" id="hpLr" min="0.01" max="0.30" step="0.01" value="0.05">
+          </div>
+        </div>
+        <div class="hp-sub">Padrão do modelo validado anteriormente: 150 árvores · profundidade 3 · learning rate 0,05 (subsample fixo em 80%).</div>
+      </div>
+
+      <div class="hp-block">
+        <div class="hp-title">Benchmark de comparação — suavização exponencial (Holt)</div>
+        <p style="color:var(--muted); font-size:13px; margin:0 0 16px;">
+          Roda junto com o treino, usando só a própria série histórica de puxada de cada SKU (sem as variáveis de estoque/demanda), para
+          servir de referência simples: se a árvore de decisão não superar esse modelo, ela não se paga.
+        </p>
+        <div class="hp-grid">
+          <div class="hp-item">
+            <div class="hp-label-row"><span>Alpha (nível)</span><span class="hp-val" id="esAlphaVal">0,30</span></div>
+            <input type="range" id="esAlpha" min="0.05" max="0.95" step="0.05" value="0.3">
+          </div>
+          <div class="hp-item">
+            <div class="hp-label-row"><span>Beta (tendência)</span><span class="hp-val" id="esBetaVal">0,10</span></div>
+            <input type="range" id="esBeta" min="0.05" max="0.95" step="0.05" value="0.1">
+          </div>
+        </div>
+        <div class="hp-sub">Alpha alto reage mais rápido a mudanças recentes; beta alto deixa a tendência (subida/queda) mais sensível.</div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn" id="trainBtn" disabled>Treinar modelo e gerar previsão</button>
+        <button class="btn ghost" id="resetHpBtn">Restaurar padrão</button>
+        <span id="statusText" style="color:var(--muted); font-size:13px;"></span>
+      </div>
+      <div class="err" id="errBox"></div>
+    </div>
+  </section>
+
+  <!-- ============ PROGRESS ============ -->
+  <section id="progressSection">
+    <div class="sec-head"><span class="sec-num">02</span><span class="sec-title">Treinamento</span></div>
+    <div class="card">
+      <div class="prog-label"><span id="progStage">Preparando dados…</span><span id="progPct">0%</span></div>
+      <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+  </section>
+
+  <!-- ============ RESULTS ============ -->
+  <section id="resultsSection">
+    <div class="card chart-filter-bar">
+      <div class="cf-title">Filtrar os gráficos abaixo</div>
+      <div class="cf-row">
+        <div class="cf-item">
+          <label for="cfEmpresa">Empresa</label>
+          <select id="cfEmpresa"><option value="Todas">Todas</option></select>
+        </div>
+        <div class="cf-item">
+          <label for="cfRegional">Regional</label>
+          <select id="cfRegional"><option value="Todas">Todas</option></select>
+        </div>
+        <div class="cf-item">
+          <label for="cfFornecedor">Fornecedor</label>
+          <select id="cfFornecedor"><option value="Todos">Todos</option></select>
+        </div>
+        <button class="btn ghost small" id="cfClearBtn" type="button">Limpar filtros</button>
+      </div>
+      <div class="cf-note" id="cfNote"></div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">02b</span><span class="sec-title">Puxada mensal — histórico e projeções</span></div>
+    <div class="card">
+      <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
+        Total de puxada por mês (soma de todos os combos do escopo atual). As duas últimas marcações são as projeções de cada modelo
+        para D+30 e D+60, a partir do último mês real.
+      </p>
+      <div id="monthlyChartWrap"></div>
+      <div class="chart-legend" id="monthlyChartLegend"></div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">02c</span><span class="sec-title">Árvore de decisão — real vs. previsto (mês a mês)</span></div>
+    <div class="card">
+      <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
+        Compara o total real de puxada com o que a árvore de decisão previu para aquele mesmo mês, 30 e 60 dias antes, mês a mês em todo
+        o histórico — mostra o quão perto a previsão fica do real. À esquerda da marcação "holdout" o modelo já tinha visto aqueles meses
+        no treino (tende a acertar mais); à direita são meses nunca vistos, o teste mais realista do modelo.
+      </p>
+      <div id="gbmAccuracyChartWrap"></div>
+      <div class="chart-legend" id="gbmAccuracyChartLegend"></div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">02d</span><span class="sec-title">Suavização exponencial — real vs. previsto (mês a mês)</span></div>
+    <div class="card">
+      <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
+        O mesmo comparativo, agora para o modelo de suavização exponencial — útil para colocar lado a lado com o gráfico acima e ver em
+        quais meses cada modelo chega mais perto do real.
+      </p>
+      <div id="esAccuracyChartWrap"></div>
+      <div class="chart-legend" id="esAccuracyChartLegend"></div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">03</span><span class="sec-title">Panorama da base</span></div>
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">04</span><span class="sec-title">Desempenho do modelo</span></div>
+    <div class="card">
+      <div class="perf-grid" id="perfGrid"></div>
+      <div class="note-box" id="perfNote">
+        <b>Como ler:</b> o modelo é um Gradient Boosting, validado com holdout temporal (últimos 3 meses de alvo conhecido, nunca vistos
+        no treino) e depois retreinado com todo o histórico para gerar a previsão final. MAPE alto é esperado em SKUs de baixo volume —
+        use o MAE como referência mais estável.
+      </div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">04b</span><span class="sec-title">Comparação de hiperparâmetros</span></div>
+    <div class="card">
+      <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
+        Testa 8 combinações de número de árvores, profundidade e learning rate (só o holdout de validação, sem gerar previsão) para ajudar
+        a decidir se vale mudar a configuração atual. Ao terminar, escolha uma linha e clique em "usar" para aplicá-la aos controles acima
+        — depois é só clicar em "Treinar modelo e gerar previsão" de novo.
+      </p>
+      <button class="btn ghost small" id="compareBtn">Comparar hiperparâmetros (8 combinações)</button>
+      <div id="compareResultsWrap" style="margin-top:20px; display:none;">
+        <div class="table-scroll" style="max-height:360px;">
+          <table id="compareTable">
+            <thead><tr>
+              <th>Árvores</th><th>Profundidade</th><th>Learning rate</th>
+              <th>MAE 30d</th><th>R² 30d</th><th>MAE 60d</th><th>R² 60d</th><th>Tempo</th><th></th>
+            </tr></thead>
+            <tbody id="compareTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">04c</span><span class="sec-title">Árvore de decisão vs. suavização exponencial</span></div>
+    <div class="card">
+      <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
+        Um benchmark simples (suavização exponencial de Holt, nível + tendência), usando <b style="color:var(--text)">só o histórico de
+        puxada de cada SKU</b> — sem as variáveis de estoque e demanda. Avaliado exatamente nos mesmos meses de holdout do modelo de
+        árvore, para comparação direta: se a árvore não superar esse número, ela não está agregando valor sobre um modelo bem mais simples.
+      </p>
+      <div class="table-scroll">
+        <table id="modelCompareTable">
+          <thead><tr>
+            <th>Horizonte</th><th>Modelo</th><th>MAE</th><th>RMSE</th><th>R²</th><th>MAPE</th>
+          </tr></thead>
+          <tbody id="modelCompareBody"></tbody>
+        </table>
+      </div>
+      <div class="note-box" id="modelCompareNote"></div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">04d</span><span class="sec-title">Top 10 maiores erros de previsão</span></div>
+    <div class="card">
+      <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
+        Os 10 combos de empresa/regional/SKU (e seus fornecedores) onde a árvore de decisão mais errou nos meses de holdout — a soma
+        do erro absoluto médio (MAE) entre o previsto e o real, mês a mês. Útil para saber onde o modelo é menos confiável e vale reforçar
+        com revisão manual ou estoque de segurança extra.
+      </p>
+      <div class="perf-grid">
+        <div class="horizon-card">
+          <div class="horizon-head"><span class="horizon-name">30 dias</span></div>
+          <div class="table-scroll" style="max-height:420px;">
+            <table id="topErr30Table">
+              <thead><tr>
+                <th>#</th><th>Empresa</th><th>Regional</th><th>SKU</th><th>MAE</th><th>Real médio</th><th>Previsto médio</th><th>Fornecedor</th>
+              </tr></thead>
+              <tbody id="topErr30Body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="horizon-card">
+          <div class="horizon-head"><span class="horizon-name">60 dias</span></div>
+          <div class="table-scroll" style="max-height:420px;">
+            <table id="topErr60Table">
+              <thead><tr>
+                <th>#</th><th>Empresa</th><th>Regional</th><th>SKU</th><th>MAE</th><th>Real médio</th><th>Previsto médio</th><th>Fornecedor</th>
+              </tr></thead>
+              <tbody id="topErr60Body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <button class="btn ghost small" id="exportTopErrCsvBtn">Baixar CSV (30 e 60 dias)</button>
+      </div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">05</span><span class="sec-title">Previsão por empresa / regional / SKU</span></div>
+    <div class="card">
+      <div class="table-toolbar">
+        <input class="search-input" id="searchInput" placeholder="Buscar por empresa, regional, SKU ou descrição…">
+        <div style="display:flex; gap:10px;">
+          <button class="btn ghost small" id="exportCsvBtn">Baixar CSV</button>
+          <button class="btn small" id="exportXlsxBtn">Baixar Excel (.xlsx)</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table id="forecastTable">
+          <thead><tr id="tableHeadRow"></tr></thead>
+          <tbody id="tableBody"></tbody>
+          <tfoot><tr id="tableFootRow"></tr></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">06</span><span class="sec-title">Previsão por fornecedor</span></div>
+    <div class="card" id="supplierNoContratos" style="display:none;">
+      <p style="color:var(--muted); font-size:13.5px; margin:0;">
+        Aba <b style="color:var(--text)">f_contratos</b> não encontrada neste arquivo — a segregação por fornecedor não é exibida nesta
+        rodada. Suba um arquivo com essa aba (cod_empresa, cod_regional_contrato_compra, codmat, dscmat, codcdr, nomecdr,
+        porcentagem_contrato.1) para ativar esta seção.
+      </p>
+    </div>
+    <div id="supplierSection" style="display:none;">
+      <div class="card">
+        <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
+          A previsão de cada combo (empresa/regional/SKU) é rateada entre os fornecedores contratados, na proporção do percentual de
+          contrato de cada um (<span class="hl">f_contratos</span>). Combos sem contrato cadastrado, ou com percentual de contrato
+          incompleto, aparecem em itálico como referência de dado a completar — o total ainda bate com a previsão geral.
+        </p>
+        <div class="kpi-grid" id="fornKpiGrid" style="margin-top:18px;"></div>
+      </div>
+
+      <div class="card" style="margin-top:24px;">
+        <div class="sec-head" style="margin-top:0; margin-bottom:12px;"><span class="sec-title" style="font-size:16px;">Resumo por fornecedor</span></div>
+        <div class="table-scroll" style="max-height:340px;">
+          <table>
+            <thead><tr>
+              <th>Fornecedor</th><th>Combos atendidos</th><th>Previsão D+30</th><th>Participação D+30</th>
+              <th>Previsão D+60</th><th>Participação D+60</th>
+            </tr></thead>
+            <tbody id="fornAggBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:24px;">
+        <div class="table-toolbar">
+          <input class="search-input" id="fornSearchInput" placeholder="Buscar por empresa, regional, SKU, descrição ou fornecedor…">
+          <div style="display:flex; gap:10px;">
+            <button class="btn ghost small" id="exportFornCsvBtn">Baixar CSV</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table id="fornTable">
+            <thead><tr id="fornTableHeadRow"></tr></thead>
+            <tbody id="fornTableBody"></tbody>
+            <tfoot><tr id="fornTableFootRow"></tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="classOuterSection">
+    <div class="sec-head" style="margin-top:38px;"><span class="sec-num">07</span><span class="sec-title">Previsão por classe de SKU</span></div>
+    <div class="card" id="classNoData" style="display:none;">
+      <p style="color:var(--muted); font-size:13.5px; margin:0;">
+        Aba <b style="color:var(--text)">d_class_poste</b> não encontrada neste arquivo — a segregação por classe não é exibida nesta
+        rodada. Suba um arquivo com essa aba (codmat, dscmat, Classificação) para ativar esta seção.
+      </p>
+    </div>
+    <div id="classSection" style="display:none;">
+      <div class="card">
+        <p style="color:var(--muted); font-size:13.5px; margin-top:0;">
+          Cada SKU da previsão é classificado via <span class="hl">d_class_poste</span> e agrupado por classe. Quando a aba de
+          fornecedores também está disponível, a tabela detalhada abaixo combina as duas dimensões: empresa, regional, classe e
+          fornecedor (somando os SKUs de cada classe).
+        </p>
+        <div class="kpi-grid" id="classKpiGrid" style="margin-top:18px;"></div>
+      </div>
+
+      <div class="card" style="margin-top:24px;">
+        <div class="sec-head" style="margin-top:0; margin-bottom:12px;"><span class="sec-title" style="font-size:16px;">Resumo por classe</span></div>
+        <div class="table-scroll" style="max-height:280px;">
+          <table>
+            <thead><tr>
+              <th>Classe</th><th>Combos</th><th>Previsão D+30</th><th>Participação D+30</th>
+              <th>Previsão D+60</th><th>Participação D+60</th>
+            </tr></thead>
+            <tbody id="classAggBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:24px; display:none;" id="classFornDetailWrap">
+        <div class="sec-head" style="margin-top:0; margin-bottom:12px;"><span class="sec-title" style="font-size:16px;">Previsão por empresa / regional / classe / fornecedor</span></div>
+        <div class="table-toolbar">
+          <input class="search-input" id="classSearchInput" placeholder="Buscar por empresa, regional, classe ou fornecedor…">
+          <div style="display:flex; gap:10px;">
+            <button class="btn ghost small" id="exportClassCsvBtn">Baixar CSV</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table id="classTable">
+            <thead><tr id="classTableHeadRow"></tr></thead>
+            <tbody id="classTableBody"></tbody>
+            <tfoot><tr id="classTableFootRow"></tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    PREVISÃO DE PUXADA — MODELO RETREINADO LOCALMENTE A CADA UPLOAD. NENHUM DADO É ENVIADO A SERVIDORES EXTERNOS.
+  </footer>
+</div>
+
+<script>
+
+'use strict';
+
+// Modelo pré-treinado embutido no pacote publicado (null nesta versão de desenvolvimento;
+// a versão publicada substitui isto por um objeto grande com o modelo já treinado).
+const EMBEDDED_RUN = null;
+
+
+/* ======================================================================
+   CONSTANTES E CONFIG
+   ====================================================================== */
+const REQUIRED_STOCK_COLS = ['data_ref','cod_empresa','cod_regional','Codigo Material','Descrição_do_Material',
+  'Consumo_M0','Demanda_M0','Demanda_M1','Demanda_M2','Demanda_M3','CMM_3','CMM_6','CMM_12','Estoque_N3','Compra_em_aberto'];
+const REQUIRED_CARTAS_COLS = ['data_ref','cod_empresa','cod_regional','cod_mat','desc_mat','qtd_puxada'];
+const REQUIRED_CONTRATOS_COLS = ['cod_empresa','cod_regional_contrato_compra','codmat','dscmat','codcdr','nomecdr','porcentagem_contrato.1'];
+const REQUIRED_CLASS_COLS = ['codmat','dscmat','Classificação'];
+const SEM_CONTRATO_LABEL = 'Sem contrato cadastrado';
+const SEM_FORNECEDOR_LABEL = 'Sem fornecedor definido (percentual não contratado)';
+const SEM_CLASSE_LABEL = 'Sem classificação';
+
+const ALL_FEAT_COLS = ['Consumo_M0','Demanda_M0','Demanda_M1','Demanda_M2','Demanda_M3',
+  'CMM_3','CMM_6','CMM_12','Estoque_N3','Compra_em_aberto','puxada_t','puxada_lag1','puxada_lag2'];
+
+const MONTH_NAMES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+
+const DEFAULT_PARAMS = { nEstimators: 150, maxDepth: 3, lr: 0.05, subsample: 0.8, seed: 42 };
+const ES_DEFAULT_PARAMS = { alpha: 0.3, beta: 0.1 };
+
+function getParamsFromUI(){
+  const nEl = document.getElementById('hpTrees');
+  const dEl = document.getElementById('hpDepth');
+  const lEl = document.getElementById('hpLr');
+  if (!nEl || !dEl || !lEl) return { ...DEFAULT_PARAMS };
+  return {
+    nEstimators: parseInt(nEl.value, 10),
+    maxDepth: parseInt(dEl.value, 10),
+    lr: parseFloat(lEl.value),
+    subsample: DEFAULT_PARAMS.subsample,
+    seed: DEFAULT_PARAMS.seed,
+  };
+}
+
+function getEsParamsFromUI(){
+  const aEl = document.getElementById('esAlpha');
+  const bEl = document.getElementById('esBeta');
+  if (!aEl || !bEl) return { ...ES_DEFAULT_PARAMS };
+  return { alpha: parseFloat(aEl.value), beta: parseFloat(bEl.value) };
+}
+
+// combinações curadas para o modo "comparar hiperparâmetros" (holdout apenas, sem retreino final)
+const HP_GRID = [
+  { nEstimators: 100, maxDepth: 2, lr: 0.10 },
+  { nEstimators: 150, maxDepth: 3, lr: 0.05 },
+  { nEstimators: 300, maxDepth: 3, lr: 0.05 },
+  { nEstimators: 300, maxDepth: 4, lr: 0.03 },
+  { nEstimators: 500, maxDepth: 3, lr: 0.03 },
+  { nEstimators: 200, maxDepth: 2, lr: 0.10 },
+  { nEstimators: 400, maxDepth: 4, lr: 0.02 },
+  { nEstimators: 150, maxDepth: 5, lr: 0.05 },
+].map(c => ({ ...c, subsample: DEFAULT_PARAMS.subsample, seed: DEFAULT_PARAMS.seed }));
+
+let uploadedFile = null;
+let lastRun = null; // holds everything needed for export after training
+
+/* ======================================================================
+   UTIL
+   ====================================================================== */
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+function excelSerialToDate(serial){
+  const utcDays = Math.floor(serial - 25569);
+  const utcMs = utcDays * 86400 * 1000;
+  return new Date(utcMs);
+}
+function toDate(v){
+  if (v instanceof Date) return v;
+  if (typeof v === 'number') return excelSerialToDate(v);
+  if (typeof v === 'string'){ const d = new Date(v); if (!isNaN(d.getTime())) return d; }
+  return null;
+}
+function ymInt(date){ return date.getFullYear()*12 + date.getMonth(); }
+function ymLabel(ymi){
+  const y = Math.floor(ymi/12), m = ymi - y*12;
+  return `${MONTH_NAMES[m]}/${String(y).slice(2)}`;
+}
+function ymLabelLong(ymi){
+  const y = Math.floor(ymi/12), m = ymi - y*12;
+  return `${MONTH_NAMES[m]} de ${y}`;
+}
+function normStr(v){ return (v===null||v===undefined) ? '' : String(v).trim(); }
+function fmtInt(n){ return Math.round(n).toLocaleString('pt-BR'); }
+function fmtNum(n, d=2){ return Number(n).toLocaleString('pt-BR', {minimumFractionDigits:d, maximumFractionDigits:d}); }
+function key3(e,r,m){ return `${e}|${r}|${m}`; }
+
+/* ======================================================================
+   LEITURA DO XLSX
+   ====================================================================== */
+function readWorkbookSheet(wb, sheetName, requiredCols){
+  const ws = wb.Sheets[sheetName];
+  if (!ws) throw new Error(`Aba "${sheetName}" não encontrada no arquivo. Abas disponíveis: ${wb.SheetNames.join(', ')}`);
+  const rows = XLSX.utils.sheet_to_json(ws, { raw:true, defval:null });
+  if (!rows.length) throw new Error(`Aba "${sheetName}" está vazia.`);
+  const cols = Object.keys(rows[0]);
+  const missing = requiredCols.filter(c => !cols.includes(c));
+  if (missing.length){
+    throw new Error(`Aba "${sheetName}" está sem as colunas: ${missing.join(', ')}.\nColunas encontradas: ${cols.join(', ')}`);
+  }
+  return rows;
+}
+
+async function parseFile(file){
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type:'array', cellDates:true });
+  const stockRaw = readWorkbookSheet(wb, 'f_stockout', REQUIRED_STOCK_COLS);
+  const cartasRaw = readWorkbookSheet(wb, 'f_relatorio_cartas', REQUIRED_CARTAS_COLS);
+  let contratosRaw = null;
+  if (wb.SheetNames.includes('f_contratos')){
+    contratosRaw = readWorkbookSheet(wb, 'f_contratos', REQUIRED_CONTRATOS_COLS);
+  }
+  let classRaw = null;
+  if (wb.SheetNames.includes('d_class_poste')){
+    classRaw = readWorkbookSheet(wb, 'd_class_poste', REQUIRED_CLASS_COLS);
+  }
+  return { stockRaw, cartasRaw, contratosRaw, classRaw };
+}
+
+/* ======================================================================
+   CONSTRUÇÃO DO PAINEL (equivalente ao merge/lag/lead em pandas)
+   ====================================================================== */
+function buildPanel(stockRaw, cartasRaw, opts){
+  // --- normaliza stockout ---
+  let stock = stockRaw.map(r => {
+    const d = toDate(r['data_ref']);
+    return {
+      cod_empresa: normStr(r['cod_empresa']),
+      cod_regional: normStr(r['cod_regional']),
+      cod_mat: normStr(r['Codigo Material']),
+      desc_mat: normStr(r['Descrição_do_Material']),
+      date: d,
+      ym: d ? ymInt(d) : null,
+      Consumo_M0: Number(r['Consumo_M0']) || 0,
+      Demanda_M0: Number(r['Demanda_M0']) || 0,
+      Demanda_M1: Number(r['Demanda_M1']) || 0,
+      Demanda_M2: Number(r['Demanda_M2']) || 0,
+      Demanda_M3: Number(r['Demanda_M3']) || 0,
+      CMM_3: Number(r['CMM_3']) || 0,
+      CMM_6: Number(r['CMM_6']) || 0,
+      CMM_12: Number(r['CMM_12']) || 0,
+      Estoque_N3: Number(r['Estoque_N3']) || 0,
+      Compra_em_aberto: Number(r['Compra_em_aberto']) || 0,
+    };
+  }).filter(r => r.ym !== null);
+
+  const totalBefore = stock.length;
+  if (opts.filterPoste) stock = stock.filter(r => r.desc_mat.toUpperCase().startsWith('POSTE'));
+  if (opts.filterCmm12) stock = stock.filter(r => r.CMM_12 > 0);
+  const totalAfter = stock.length;
+
+  // --- normaliza e agrega cartas por chave+mes ---
+  const cartasAgg = new Map();
+  cartasRaw.forEach(r => {
+    const d = toDate(r['data_ref']);
+    if (!d) return;
+    const e = normStr(r['cod_empresa']), reg = normStr(r['cod_regional']), m = normStr(r['cod_mat']);
+    const ym = ymInt(d);
+    const k = key3(e,reg,m) + '|' + ym;
+    const qtd = Number(r['qtd_puxada']) || 0;
+    cartasAgg.set(k, (cartasAgg.get(k)||0) + qtd);
+  });
+
+  // --- puxada_t (contemporânea) ---
+  stock.forEach(r => {
+    const k = key3(r.cod_empresa, r.cod_regional, r.cod_mat) + '|' + r.ym;
+    r.puxada_t = cartasAgg.get(k) || 0;
+  });
+
+  // --- indice por chave+mes para lags/leads ---
+  const byKeyYm = new Map();
+  stock.forEach(r => {
+    const k = key3(r.cod_empresa, r.cod_regional, r.cod_mat) + '|' + r.ym;
+    byKeyYm.set(k, r);
+  });
+  function puxadaAt(r, offset){
+    const k = key3(r.cod_empresa, r.cod_regional, r.cod_mat) + '|' + (r.ym + offset);
+    const row = byKeyYm.get(k);
+    return row ? row.puxada_t : 0;
+  }
+  stock.forEach(r => {
+    r.puxada_lag1 = puxadaAt(r, -1);
+    r.puxada_lag2 = puxadaAt(r, -2);
+    const f1 = byKeyYm.get(key3(r.cod_empresa,r.cod_regional,r.cod_mat) + '|' + (r.ym+1));
+    const f2 = byKeyYm.get(key3(r.cod_empresa,r.cod_regional,r.cod_mat) + '|' + (r.ym+2));
+    r.target_h1 = f1 ? f1.puxada_t : null;
+    r.target_h2 = f2 ? f2.puxada_t : null;
+  });
+
+  return { panel: stock, totalBefore, totalAfter, cartasAgg };
+}
+
+/* ======================================================================
+   BENCHMARK: SUAVIZAÇÃO EXPONENCIAL DE HOLT (nível + tendência)
+   — modelo simples, por SKU/empresa/regional, usado só como comparação
+   ====================================================================== */
+function computeHoltSeries(panel, alpha, beta){
+  const groups = new Map();
+  panel.forEach(r => {
+    const k = key3(r.cod_empresa, r.cod_regional, r.cod_mat);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  });
+  groups.forEach(rows => {
+    rows.sort((a,b)=> a.ym - b.ym);
+    let level = null, trend = 0;
+    rows.forEach((row, i) => {
+      const y = row.puxada_t;
+      if (i === 0){
+        level = y; trend = 0;
+      } else {
+        const lastLevel = level, lastTrend = trend;
+        level = alpha*y + (1-alpha)*(lastLevel + lastTrend);
+        trend = beta*(level - lastLevel) + (1-beta)*lastTrend;
+      }
+      row.es_h1 = Math.max(0, level + trend);
+      row.es_h2 = Math.max(0, level + 2*trend);
+    });
+  });
+}
+
+function evaluateHolt(panel, esParams, curYm){
+  computeHoltSeries(panel, esParams.alpha, esParams.beta);
+
+  function evalHorizon(tcol, esCol){
+    const df = panel.filter(r => r[tcol] !== null && !isNaN(r[tcol]));
+    df.sort((a,b)=> a.ym - b.ym);
+    const maxYm = Math.max(...df.map(r=>r.ym));
+    const cutoff = maxYm - 3;
+    const test = df.filter(r => r.ym > cutoff);
+    const predTest = test.map(r => Math.max(0, r[esCol]));
+    const errorDetail = test.map((r,i) => ({
+      cod_empresa: r.cod_empresa, cod_regional: r.cod_regional, cod_mat: r.cod_mat,
+      ym: r.ym, actual: r[tcol], predicted: predTest[i],
+    }));
+    return { perf: metrics(test.map(r=>r[tcol]), predTest), nTest: test.length, errorDetail };
+  }
+
+  const h1 = evalHorizon('target_h1', 'es_h1');
+  const h2 = evalHorizon('target_h2', 'es_h2');
+
+  const cur = panel.filter(r => r.ym === curYm);
+  const forecastRows = cur.map(r => ({
+    cod_empresa: r.cod_empresa, cod_regional: r.cod_regional, cod_mat: r.cod_mat, desc_mat: r.desc_mat,
+    es_30d: Math.max(0, Math.round(r.es_h1)), es_60d: Math.max(0, Math.round(r.es_h2)),
+  }));
+
+  return { params: esParams, h1, h2, forecastRows };
+}
+
+/* ======================================================================
+   SEGREGAÇÃO POR FORNECEDOR (f_contratos)
+   ====================================================================== */
+function buildContratosIndex(contratosRaw){
+  const idx = new Map(); // key3(empresa,regional,mat) -> [{codcdr,nomecdr,pct}]
+  contratosRaw.forEach(r => {
+    const k = key3(normStr(r['cod_empresa']), normStr(r['cod_regional_contrato_compra']), normStr(r['codmat']));
+    const pct = Number(r['porcentagem_contrato.1']);
+    if (isNaN(pct)) return;
+    if (!idx.has(k)) idx.set(k, []);
+    idx.get(k).push({ codcdr: normStr(r['codcdr']), nomecdr: normStr(r['nomecdr']), pct });
+  });
+  return idx;
+}
+
+// aloca um total inteiro entre percentuais garantindo que a soma alocada bate exatamente com o total (método do maior resto)
+function allocateByPercent(total, pcts){
+  const n = pcts.length;
+  if (n === 0) return [];
+  const exact = pcts.map(p => p*total);
+  const floors = exact.map(Math.floor);
+  const allocated = floors.reduce((a,b)=>a+b,0);
+  let remainder = Math.round(total - allocated);
+  const order = exact.map((v,i)=>({ i, frac: v - floors[i] })).sort((a,b)=> b.frac - a.frac);
+  const result = floors.slice();
+  for (let k=0; k<remainder && n>0; k++) result[order[k % n].i] += 1;
+  return result;
+}
+
+/* ======================================================================
+   TOP 10 SKUS COM MAIORES ERROS DE PREVISÃO (holdout) — por empresa/regional/sku/fornecedor
+   ====================================================================== */
+function buildTopErrors(errorDetail, contratosIndex, topN){
+  const groups = new Map();
+  errorDetail.forEach(r => {
+    const k = key3(r.cod_empresa, r.cod_regional, r.cod_mat);
+    if (!groups.has(k)) groups.set(k, { cod_empresa:r.cod_empresa, cod_regional:r.cod_regional, cod_mat:r.cod_mat, desc_mat:r.desc_mat, rows:[] });
+    groups.get(k).rows.push(r);
+  });
+
+  const combos = Array.from(groups.values()).map(g => {
+    const n = g.rows.length;
+    const mae = g.rows.reduce((s,r)=>s+Math.abs(r.actual-r.predicted),0)/n;
+    const meanActual = g.rows.reduce((s,r)=>s+r.actual,0)/n;
+    const meanPredicted = g.rows.reduce((s,r)=>s+r.predicted,0)/n;
+    return { cod_empresa:g.cod_empresa, cod_regional:g.cod_regional, cod_mat:g.cod_mat, desc_mat:g.desc_mat,
+      nMeses:n, mae, meanActual, meanPredicted };
+  }).sort((a,b)=> b.mae - a.mae).slice(0, topN);
+
+  const rows = [];
+  combos.forEach((c,idx) => {
+    const k = key3(c.cod_empresa, c.cod_regional, c.cod_mat);
+    const contratos = contratosIndex ? contratosIndex.get(k) : null;
+    const fornecedores = (contratos && contratos.length) ? contratos : [{ nomecdr:null, pct:null }];
+    fornecedores.forEach(f => {
+      rows.push({
+        rank: idx+1, cod_empresa:c.cod_empresa, cod_regional:c.cod_regional, cod_mat:c.cod_mat, desc_mat:c.desc_mat,
+        nMeses:c.nMeses, mae:c.mae, meanActual:c.meanActual, meanPredicted:c.meanPredicted,
+        nomecdr: f.nomecdr === null ? (contratosIndex ? SEM_CONTRATO_LABEL : '—') : f.nomecdr,
+        pct: f.pct,
+      });
+    });
+  });
+  return rows;
+}
+
+function buildSupplierBreakdown(forecastRows, contratosRaw, classIndex){
+  const idx = buildContratosIndex(contratosRaw);
+  const detailRows = [];
+  let combosComContrato = 0, combosSemContrato = 0;
+
+  forecastRows.forEach(r => {
+    const k = key3(r.cod_empresa, r.cod_regional, r.cod_mat);
+    const contratos = idx.get(k);
+    let entries;
+    if (!contratos || !contratos.length){
+      combosSemContrato++;
+      entries = [{ codcdr:null, nomecdr:SEM_CONTRATO_LABEL, pct:1, semContrato:true }];
+    } else {
+      combosComContrato++;
+      const sumPct = contratos.reduce((s,c)=>s+c.pct, 0);
+      entries = contratos.map(c => ({ ...c, semContrato:false }));
+      if (sumPct < 0.999){
+        entries.push({ codcdr:null, nomecdr:SEM_FORNECEDOR_LABEL, pct: 1 - sumPct, semContrato:true });
+      }
+    }
+    const pcts = entries.map(e=>e.pct);
+    const alloc30 = allocateByPercent(r.prev_30d, pcts);
+    const alloc60 = allocateByPercent(r.prev_60d, pcts);
+    const classe = classIndex ? (classIndex.get(r.cod_mat) || SEM_CLASSE_LABEL) : null;
+    entries.forEach((e,i) => {
+      detailRows.push({
+        cod_empresa: r.cod_empresa, cod_regional: r.cod_regional, cod_mat: r.cod_mat, desc_mat: r.desc_mat,
+        codcdr: e.codcdr, nomecdr: e.nomecdr, pct: e.pct, semContrato: e.semContrato, classe,
+        prev_30d: alloc30[i], prev_60d: alloc60[i],
+      });
+    });
+  });
+
+  const aggMap = new Map();
+  detailRows.forEach(r => {
+    if (!aggMap.has(r.nomecdr)) aggMap.set(r.nomecdr, { nomecdr:r.nomecdr, semContrato:r.semContrato, combos:0, prev_30d:0, prev_60d:0 });
+    const a = aggMap.get(r.nomecdr);
+    a.combos += 1; a.prev_30d += r.prev_30d; a.prev_60d += r.prev_60d;
+  });
+  const totalForecast30 = forecastRows.reduce((s,r)=>s+r.prev_30d,0);
+  const totalForecast60 = forecastRows.reduce((s,r)=>s+r.prev_60d,0);
+  const aggByFornecedor = Array.from(aggMap.values())
+    .map(a => ({ ...a, share30: totalForecast30>0 ? a.prev_30d/totalForecast30 : 0, share60: totalForecast60>0 ? a.prev_60d/totalForecast60 : 0 }))
+    .sort((a,b)=> b.prev_30d - a.prev_30d);
+
+  return { detailRows, aggByFornecedor, combosComContrato, combosSemContrato, totalCombos: forecastRows.length };
+}
+
+/* ======================================================================
+   SEGREGAÇÃO POR CLASSE DE SKU (d_class_poste)
+   ====================================================================== */
+function buildClassIndex(classRaw){
+  const idx = new Map();
+  classRaw.forEach(r => {
+    const k = normStr(r['codmat']);
+    idx.set(k, normStr(r['Classificação']) || SEM_CLASSE_LABEL);
+  });
+  return idx;
+}
+
+function buildClassBreakdown(forecastRows, classIndex){
+  const aggMap = new Map();
+  forecastRows.forEach(r => {
+    const classe = classIndex.get(r.cod_mat) || SEM_CLASSE_LABEL;
+    if (!aggMap.has(classe)) aggMap.set(classe, { classe, combos:0, prev_30d:0, prev_60d:0 });
+    const a = aggMap.get(classe);
+    a.combos += 1; a.prev_30d += r.prev_30d; a.prev_60d += r.prev_60d;
+  });
+  const total30 = forecastRows.reduce((s,r)=>s+r.prev_30d,0);
+  const total60 = forecastRows.reduce((s,r)=>s+r.prev_60d,0);
+  return Array.from(aggMap.values())
+    .map(a => ({ ...a, share30: total30>0 ? a.prev_30d/total30 : 0, share60: total60>0 ? a.prev_60d/total60 : 0 }))
+    .sort((a,b)=> b.prev_30d - a.prev_30d);
+}
+
+// agrupa as linhas já rateadas por fornecedor em empresa/regional/classe/fornecedor (soma os SKUs de cada classe)
+function buildClasseFornecedorRows(supplierDetailRows){
+  const map = new Map();
+  supplierDetailRows.forEach(r => {
+    const k = [r.cod_empresa, r.cod_regional, r.classe, r.nomecdr].join('|');
+    if (!map.has(k)){
+      map.set(k, {
+        cod_empresa:r.cod_empresa, cod_regional:r.cod_regional, classe:r.classe, nomecdr:r.nomecdr,
+        semContrato:r.semContrato, skuSet:new Set(), prev_30d:0, prev_60d:0
+      });
+    }
+    const a = map.get(k);
+    a.skuSet.add(r.cod_mat);
+    a.prev_30d += r.prev_30d; a.prev_60d += r.prev_60d;
+  });
+  return Array.from(map.values())
+    .map(a => ({ cod_empresa:a.cod_empresa, cod_regional:a.cod_regional, classe:a.classe, nomecdr:a.nomecdr,
+      semContrato:a.semContrato, nSkus:a.skuSet.size, prev_30d:a.prev_30d, prev_60d:a.prev_60d }))
+    .sort((a,b)=> (a.cod_empresa+a.cod_regional+a.classe+a.nomecdr).localeCompare(b.cod_empresa+b.cod_regional+b.classe+b.nomecdr));
+}
+
+/* ======================================================================
+   ÁRVORE DE REGRESSÃO (CART) + GRADIENT BOOSTING
+   ====================================================================== */
+function buildColumns(rowObjs, featCols){
+  const n = rowObjs.length;
+  const cols = {};
+  featCols.forEach(f=>{
+    const arr = new Float64Array(n);
+    for (let i=0;i<n;i++) arr[i] = rowObjs[i][f];
+    cols[f] = arr;
+  });
+  return cols;
+}
+
+function sseOf(idxs, y){
+  let s=0, ss=0; const n = idxs.length;
+  for (let k=0;k<n;k++){ const yy=y[idxs[k]]; s+=yy; ss+=yy*yy; }
+  return ss - (s*s)/n;
+}
+
+function buildTree(cols, y, idxs, featCols, depth, maxDepth){
+  const n = idxs.length;
+  let sum=0; for (let k=0;k<n;k++) sum += y[idxs[k]];
+  const mean = sum/n;
+  if (depth >= maxDepth || n < 4) return { leaf:true, value:mean };
+
+  let bestFeat=-1, bestThr=0, bestSSE=Infinity;
+  for (let f=0; f<featCols.length; f++){
+    const col = cols[featCols[f]];
+    const sorted = idxs.slice().sort((a,b)=> col[a]-col[b]);
+    let sumLeft=0, sumSqLeft=0, sumTotal=0, sumSqTotal=0;
+    for (let k=0;k<n;k++){ const yy=y[sorted[k]]; sumTotal+=yy; sumSqTotal+=yy*yy; }
+    for (let k=0;k<n-1;k++){
+      const yy = y[sorted[k]];
+      sumLeft += yy; sumSqLeft += yy*yy;
+      if (col[sorted[k]] === col[sorted[k+1]]) continue;
+      const nl = k+1, nr = n-nl;
+      if (nl<2 || nr<2) continue;
+      const sseLeft = sumSqLeft - (sumLeft*sumLeft)/nl;
+      const sumRight = sumTotal - sumLeft;
+      const sseRight = (sumSqTotal - sumSqLeft) - (sumRight*sumRight)/nr;
+      const sse = sseLeft + sseRight;
+      if (sse < bestSSE){ bestSSE=sse; bestFeat=f; bestThr=(col[sorted[k]]+col[sorted[k+1]])/2; }
+    }
+  }
+  if (bestFeat===-1) return { leaf:true, value:mean };
+  const col = cols[featCols[bestFeat]];
+  const leftIdxs=[], rightIdxs=[];
+  for (let k=0;k<n;k++){ const i=idxs[k]; if (col[i]<=bestThr) leftIdxs.push(i); else rightIdxs.push(i); }
+  if (!leftIdxs.length || !rightIdxs.length) return { leaf:true, value:mean };
+  return {
+    leaf:false, feat:featCols[bestFeat], thr:bestThr,
+    left: buildTree(cols,y,leftIdxs,featCols,depth+1,maxDepth),
+    right: buildTree(cols,y,rightIdxs,featCols,depth+1,maxDepth),
+    gain: sseOf(idxs,y) - bestSSE
+  };
+}
+function predictTreeObj(tree, xObj){
+  let node = tree;
+  while(!node.leaf){ node = (xObj[node.feat] <= node.thr) ? node.left : node.right; }
+  return node.value;
+}
+function predictTreeCol(tree, cols, i){
+  let node = tree;
+  while(!node.leaf){ node = (cols[node.feat][i] <= node.thr) ? node.left : node.right; }
+  return node.value;
+}
+
+async function trainGBM(rowObjs, targetArr, featCols, params, onProgress){
+  const { nEstimators, maxDepth, lr, subsample, seed } = params;
+  const n = rowObjs.length;
+  const cols = buildColumns(rowObjs, featCols);
+  const y = new Float64Array(targetArr);
+  let rngState = seed;
+  function rand(){ rngState = (rngState*1103515245+12345) & 0x7fffffff; return rngState/0x7fffffff; }
+  let sum=0; for(let i=0;i<n;i++) sum+=y[i];
+  const init = sum/n;
+  const preds = new Float64Array(n).fill(init);
+  const trees = [];
+  for (let t=0;t<nEstimators;t++){
+    const resid = new Float64Array(n);
+    for (let i=0;i<n;i++) resid[i]=y[i]-preds[i];
+    const allIdx = new Int32Array(n); for(let i=0;i<n;i++) allIdx[i]=i;
+    for (let i=n-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); const tmp=allIdx[i]; allIdx[i]=allIdx[j]; allIdx[j]=tmp; }
+    const sampleSize = Math.max(4, Math.floor(n*subsample));
+    const sampleIdx = Array.from(allIdx.slice(0, sampleSize));
+    const tree = buildTree(cols, resid, sampleIdx, featCols, 0, maxDepth);
+    trees.push(tree);
+    for (let i=0;i<n;i++) preds[i] += lr * predictTreeCol(tree, cols, i);
+    if (onProgress && t % 8 === 0){ onProgress(t, nEstimators); await sleep(0); }
+  }
+  if (onProgress) onProgress(nEstimators, nEstimators);
+  return {
+    init, trees, lr, featCols,
+    predictRow(xObj){ let p=this.init; for(const tr of this.trees) p += this.lr*predictTreeObj(tr, xObj); return p; },
+    featureImportance(){
+      const imp = {}; featCols.forEach(f=>imp[f]=0);
+      function walk(node){ if(!node.leaf){ imp[node.feat]+=node.gain; walk(node.left); walk(node.right);} }
+      trees.forEach(walk);
+      const total = Object.values(imp).reduce((a,b)=>a+b,0) || 1;
+      const out = {}; featCols.forEach(f=> out[f]=imp[f]/total);
+      return out;
+    }
+  };
+}
+
+function metrics(yTrue, yPred){
+  const n = yTrue.length;
+  const mae = yTrue.reduce((s,v,i)=>s+Math.abs(v-yPred[i]),0)/n;
+  const rmse = Math.sqrt(yTrue.reduce((s,v,i)=>s+(v-yPred[i])**2,0)/n);
+  const meanY = yTrue.reduce((a,b)=>a+b,0)/n;
+  const ssTot = yTrue.reduce((s,v)=>s+(v-meanY)**2,0);
+  const ssRes = yTrue.reduce((s,v,i)=>s+(v-yPred[i])**2,0);
+  const r2 = ssTot > 0 ? 1 - ssRes/ssTot : NaN;
+  let mapeSum=0, mapeN=0;
+  yTrue.forEach((v,i)=>{ if (v>0){ mapeSum += Math.abs((v-yPred[i])/v); mapeN++; } });
+  return { mae, rmse, r2, mape: mapeN>0 ? 100*mapeSum/mapeN : NaN, n };
+}
+
+/* ======================================================================
+   ORQUESTRAÇÃO: holdout -> métricas -> retreino final -> previsão
+   ====================================================================== */
+async function runHorizon(panel, tcol, featCols, params, progressCb, skipFinal){
+  const df = panel.filter(r => r[tcol] !== null && !isNaN(r[tcol]));
+  df.sort((a,b)=> a.ym - b.ym);
+  const maxYm = Math.max(...df.map(r=>r.ym));
+  const cutoff = maxYm - 3;
+  const train = df.filter(r=> r.ym <= cutoff);
+  const test = df.filter(r=> r.ym > cutoff);
+
+  const holdoutModel = await trainGBM(train, train.map(r=>r[tcol]), featCols, params,
+    (t,total)=> progressCb(`Validando horizonte (holdout) — árvore ${t}/${total}`, t/total));
+  const predTest = test.map(x => Math.max(0, holdoutModel.predictRow(x)));
+  const perf = metrics(test.map(r=>r[tcol]), predTest);
+  const trainRange = [train[0]?.ym, train[train.length-1]?.ym];
+  const testRange = [test[0]?.ym, test[test.length-1]?.ym];
+
+  if (skipFinal){
+    return { perf, trainRange, testRange, nTrain: train.length, nTest: test.length };
+  }
+
+  const errorDetail = test.map((r,i) => ({
+    cod_empresa: r.cod_empresa, cod_regional: r.cod_regional, cod_mat: r.cod_mat, desc_mat: r.desc_mat,
+    ym: r.ym, actual: r[tcol], predicted: predTest[i],
+  }));
+
+  const finalModel = await trainGBM(df, df.map(r=>r[tcol]), featCols, params,
+    (t,total)=> progressCb(`Treinando modelo final — árvore ${t}/${total}`, t/total));
+  const importance = finalModel.featureImportance();
+
+  return { perf, importance, finalModel, trainRange, testRange, nTrain: train.length, nTest: test.length, errorDetail };
+}
+
+/* ======================================================================
+   DADOS DOS GRÁFICOS — recalculável sob filtro (empresa/regional/fornecedor)
+   sem precisar retreinar; usa os modelos finais já treinados e os campos
+   já computados no painel (puxada_t, es_h1, es_h2, target_h1, target_h2).
+   ====================================================================== */
+function computeChartDatasets(panel, h1FinalModel, h2FinalModel, contratosIndex, filters){
+  const empresa = (filters && filters.empresa) || 'Todas';
+  const regional = (filters && filters.regional) || 'Todas';
+  const fornecedor = (filters && filters.fornecedor) || 'Todos';
+
+  function weightOf(r){
+    if (empresa !== 'Todas' && r.cod_empresa !== empresa) return 0;
+    if (regional !== 'Todas' && r.cod_regional !== regional) return 0;
+    if (fornecedor !== 'Todos'){
+      if (!contratosIndex) return 0;
+      const list = contratosIndex.get(key3(r.cod_empresa, r.cod_regional, r.cod_mat));
+      if (!list) return 0;
+      const entry = list.find(c => c.nomecdr === fornecedor);
+      return entry ? entry.pct : 0;
+    }
+    return 1;
+  }
+
+  const monthlyMap = new Map();
+  panel.forEach(r => {
+    const wgt = weightOf(r);
+    if (wgt === 0) return;
+    monthlyMap.set(r.ym, (monthlyMap.get(r.ym) || 0) + r.puxada_t*wgt);
+  });
+  const monthlyActual = Array.from(monthlyMap.entries()).sort((a,b)=>a[0]-b[0]).map(([ym,total]) => ({ ym, total }));
+
+  const curYm = Math.max(...panel.map(r=>r.ym));
+  const h1Ym = curYm+1, h2Ym = curYm+2;
+
+  function buildFullHistorySeries(tcol, offset, predictFn){
+    const df = panel.filter(r => r[tcol] !== null && !isNaN(r[tcol]));
+    const map = new Map();
+    df.forEach(r => {
+      const wgt = weightOf(r);
+      if (wgt === 0) return;
+      const ym = r.ym + offset;
+      const predicted = Math.max(0, predictFn(r)) * wgt;
+      if (!map.has(ym)) map.set(ym, { actual:0, predicted:0 });
+      const a = map.get(ym);
+      a.actual += r[tcol]*wgt; a.predicted += predicted;
+    });
+    return Array.from(map.entries()).sort((a,b)=>a[0]-b[0]).map(([ym,v]) => ({ ym, actual:v.actual, predicted:v.predicted }));
+  }
+  function holdoutStartFor(tcol, offset){
+    const df = panel.filter(r => r[tcol] !== null && !isNaN(r[tcol]));
+    const maxYm = Math.max(...df.map(r=>r.ym));
+    return (maxYm - 3) + offset;
+  }
+
+  const gbmPred30 = buildFullHistorySeries('target_h1', 1, r => h1FinalModel.predictRow(r));
+  const gbmPred60 = buildFullHistorySeries('target_h2', 2, r => h2FinalModel.predictRow(r));
+  const esPred30 = buildFullHistorySeries('target_h1', 1, r => r.es_h1);
+  const esPred60 = buildFullHistorySeries('target_h2', 2, r => r.es_h2);
+
+  let gbmH1Total=0, gbmH2Total=0, esH1Total=0, esH2Total=0;
+  panel.filter(r=>r.ym===curYm).forEach(r => {
+    const wgt = weightOf(r);
+    if (wgt === 0) return;
+    gbmH1Total += Math.max(0, h1FinalModel.predictRow(r)) * wgt;
+    gbmH2Total += Math.max(0, h2FinalModel.predictRow(r)) * wgt;
+    esH1Total += Math.max(0, r.es_h1) * wgt;
+    esH2Total += Math.max(0, r.es_h2) * wgt;
+  });
+
+  const holdoutStart = holdoutStartFor('target_h1', 1);
+  return {
+    chartData: { monthlyActual, curYm, h1Ym, h2Ym, gbm:{h1:gbmH1Total,h2:gbmH2Total}, es:{h1:esH1Total,h2:esH2Total} },
+    gbmAccuracyChart: { monthlyActual, pred30: gbmPred30, pred60: gbmPred60, holdoutStart },
+    esAccuracyChart: { monthlyActual, pred30: esPred30, pred60: esPred60, holdoutStart },
+  };
+}
+
+/* ======================================================================
+   MODELO PRÉ-TREINADO — carregar do pacote publicado e prever sem retreinar
+   ====================================================================== */
+function wrapSavedModel(saved){
+  return {
+    init: saved.init, trees: saved.trees, lr: saved.lr, featCols: saved.featCols,
+    predictRow(xObj){ let p = this.init; for (const tr of this.trees) p += this.lr*predictTreeObj(tr, xObj); return p; },
+    featureImportance(){
+      const imp = {}; this.featCols.forEach(f=>imp[f]=0);
+      function walk(node){ if(!node.leaf){ imp[node.feat]+=node.gain; walk(node.left); walk(node.right);} }
+      this.trees.forEach(walk);
+      const total = Object.values(imp).reduce((a,b)=>a+b,0) || 1;
+      const out = {}; this.featCols.forEach(f=> out[f]=imp[f]/total);
+      return out;
+    },
+  };
+}
+
+function deserializeRun(saved){
+  return {
+    featCols: saved.featCols, opts: saved.opts, totalBefore: saved.totalBefore, totalAfter: saved.totalAfter,
+    curYm: saved.curYm, h1Ym: saved.h1Ym, h2Ym: saved.h2Ym,
+    h1: { ...saved.h1, finalModel: wrapSavedModel(saved.h1.model) },
+    h2: { ...saved.h2, finalModel: wrapSavedModel(saved.h2.model) },
+    forecastRows: saved.forecastRows, partialH1: saved.partialH1, params: saved.params,
+    supplierBreakdown: saved.supplierBreakdown, classBreakdown: saved.classBreakdown, classFornecedorRows: saved.classFornecedorRows,
+    holt: saved.holt, topErrors30: saved.topErrors30, topErrors60: saved.topErrors60,
+    chartData: saved.chartData, gbmAccuracyChart: saved.gbmAccuracyChart, esAccuracyChart: saved.esAccuracyChart,
+    panel: saved.panel, contratosIndex: saved.contratosIndex ? new Map(saved.contratosIndex) : null,
+    nCombos: saved.nCombos, histMin: saved.histMin, histMax: saved.histMax, trainedAt: saved.trainedAt || null,
+  };
+}
+
+// gera uma previsão nova a partir de um snapshot atualizado, usando o modelo JÁ treinado (sem retreinar as árvores)
+async function quickForecastWithModel(stockRaw, cartasRaw, contratosRaw, classRaw, baseRun, progressCb){
+  progressCb('Unindo f_stockout e f_relatorio_cartas…', 0.1);
+  await sleep(0);
+  const opts = baseRun.opts || { filterPoste:true, filterCmm12:false, featCols: baseRun.featCols };
+  const { panel, totalBefore, totalAfter, cartasAgg } = buildPanel(stockRaw, cartasRaw, opts);
+
+  progressCb('Recalculando suavização exponencial…', 0.35);
+  await sleep(0);
+  computeHoltSeries(panel, baseRun.holt.params.alpha, baseRun.holt.params.beta);
+
+  const classIndex = (classRaw && classRaw.length) ? buildClassIndex(classRaw) : null;
+  const curYm = Math.max(...panel.map(r=>r.ym));
+  const h1Ym = curYm+1, h2Ym = curYm+2;
+  const cur = panel.filter(r => r.ym === curYm);
+
+  progressCb('Aplicando o modelo já treinado à base nova…', 0.55);
+  await sleep(0);
+  const forecastRows = cur.map(r => {
+    const p30 = Math.max(0, Math.round(baseRun.h1.finalModel.predictRow(r)));
+    const p60 = Math.max(0, Math.round(baseRun.h2.finalModel.predictRow(r)));
+    return {
+      cod_empresa: r.cod_empresa, cod_regional: r.cod_regional, cod_mat: r.cod_mat, desc_mat: r.desc_mat,
+      Demanda_M0: r.Demanda_M0, Demanda_M1: r.Demanda_M1, CMM_3: r.CMM_3, CMM_6: r.CMM_6,
+      Estoque_N3: r.Estoque_N3, Compra_em_aberto: r.Compra_em_aberto, puxada_t: r.puxada_t,
+      prev_30d: p30, prev_60d: p60,
+      es_30d: Math.max(0, Math.round(r.es_h1)), es_60d: Math.max(0, Math.round(r.es_h2)),
+    };
+  }).sort((a,b)=> (a.cod_empresa+a.cod_regional+a.cod_mat).localeCompare(b.cod_empresa+b.cod_regional+b.cod_mat));
+
+  progressCb('Segregando por fornecedor e por classe…', 0.75);
+  await sleep(0);
+  const contratosIndex = (contratosRaw && contratosRaw.length) ? buildContratosIndex(contratosRaw) : baseRun.contratosIndex;
+  let supplierBreakdown = null;
+  if (contratosRaw && contratosRaw.length) supplierBreakdown = buildSupplierBreakdown(forecastRows, contratosRaw, classIndex);
+
+  let classBreakdown = null, classFornecedorRows = null;
+  if (classIndex){
+    classBreakdown = buildClassBreakdown(forecastRows, classIndex);
+    if (supplierBreakdown) classFornecedorRows = buildClasseFornecedorRows(supplierBreakdown.detailRows);
+  }
+
+  progressCb('Atualizando gráficos…', 0.9);
+  await sleep(0);
+  const { chartData, gbmAccuracyChart, esAccuracyChart } = computeChartDatasets(
+    panel, baseRun.h1.finalModel, baseRun.h2.finalModel, contratosIndex, { empresa:'Todas', regional:'Todas', fornecedor:'Todos' }
+  );
+
+  let partialH1 = 0;
+  cartasAgg.forEach((v,k)=>{ if (k.endsWith('|'+h1Ym)) partialH1 += v; });
+
+  progressCb('Concluído', 1);
+
+  return {
+    ...baseRun,
+    totalBefore, totalAfter, curYm, h1Ym, h2Ym, forecastRows, partialH1,
+    supplierBreakdown, classBreakdown, classFornecedorRows,
+    chartData, gbmAccuracyChart, esAccuracyChart, panel, contratosIndex,
+    nCombos: cur.length, histMin: Math.min(...panel.map(r=>r.ym)), histMax: curYm,
+  };
+}
+
+async function trainAndForecast(stockRaw, cartasRaw, contratosRaw, classRaw, opts, params, esParams, progressCb){
+  progressCb('Unindo f_stockout e f_relatorio_cartas…', 0.02);
+  await sleep(0);
+  const { panel, totalBefore, totalAfter, cartasAgg } = buildPanel(stockRaw, cartasRaw, opts);
+
+  const featCols = (opts.featCols && opts.featCols.length) ? opts.featCols : DEFAULT_FEAT_SELECTION;
+
+  const h1 = await runHorizon(panel, 'target_h1', featCols, params, (msg,frac)=> progressCb(`[30 dias] ${msg}`, 0.05 + 0.32*frac), false);
+  const h2 = await runHorizon(panel, 'target_h2', featCols, params, (msg,frac)=> progressCb(`[60 dias] ${msg}`, 0.4 + 0.32*frac), false);
+
+  progressCb('Calculando benchmark de suavização exponencial…', 0.74);
+  await sleep(0);
+  const curYm = Math.max(...panel.map(r=>r.ym));
+  const holt = evaluateHolt(panel, esParams, curYm);
+  const holtByKey = new Map(holt.forecastRows.map(r => [key3(r.cod_empresa,r.cod_regional,r.cod_mat), r]));
+
+  progressCb('Gerando previsão a partir do snapshot mais recente…', 0.86);
+  await sleep(0);
+
+  const cur = panel.filter(r => r.ym === curYm);
+  const h1Ym = curYm + 1, h2Ym = curYm + 2;
+
+  const forecastRows = cur.map(r => {
+    const p30 = Math.max(0, Math.round(h1.finalModel.predictRow(r)));
+    const p60 = Math.max(0, Math.round(h2.finalModel.predictRow(r)));
+    const esRow = holtByKey.get(key3(r.cod_empresa,r.cod_regional,r.cod_mat));
+    return {
+      cod_empresa: r.cod_empresa, cod_regional: r.cod_regional, cod_mat: r.cod_mat, desc_mat: r.desc_mat,
+      Demanda_M0: r.Demanda_M0, Demanda_M1: r.Demanda_M1, CMM_3: r.CMM_3, CMM_6: r.CMM_6,
+      Estoque_N3: r.Estoque_N3, Compra_em_aberto: r.Compra_em_aberto, puxada_t: r.puxada_t,
+      prev_30d: p30, prev_60d: p60,
+      es_30d: esRow ? esRow.es_30d : 0, es_60d: esRow ? esRow.es_60d : 0,
+    };
+  }).sort((a,b)=> (a.cod_empresa+a.cod_regional+a.cod_mat).localeCompare(b.cod_empresa+b.cod_regional+b.cod_mat));
+
+  const classIndex = (classRaw && classRaw.length) ? buildClassIndex(classRaw) : null;
+
+  let supplierBreakdown = null;
+  if (contratosRaw && contratosRaw.length){
+    progressCb('Segregando previsão por fornecedor…', 0.96);
+    await sleep(0);
+    supplierBreakdown = buildSupplierBreakdown(forecastRows, contratosRaw, classIndex);
+  }
+
+  let classBreakdown = null, classFornecedorRows = null;
+  if (classIndex){
+    progressCb('Segregando previsão por classe de SKU…', 0.98);
+    await sleep(0);
+    classBreakdown = buildClassBreakdown(forecastRows, classIndex);
+    if (supplierBreakdown) classFornecedorRows = buildClasseFornecedorRows(supplierBreakdown.detailRows);
+  }
+
+  const contratosIndex = (contratosRaw && contratosRaw.length) ? buildContratosIndex(contratosRaw) : null;
+  const topErrors30 = buildTopErrors(h1.errorDetail, contratosIndex, 10);
+  const topErrors60 = buildTopErrors(h2.errorDetail, contratosIndex, 10);
+
+  const { chartData, gbmAccuracyChart, esAccuracyChart } = computeChartDatasets(
+    panel, h1.finalModel, h2.finalModel, contratosIndex, { empresa:'Todas', regional:'Todas', fornecedor:'Todos' }
+  );
+
+  // referência: pedidos já parcialmente lançados para o mês D+30, se existirem na base
+  let partialH1 = 0;
+  cartasAgg.forEach((v,k)=>{ if (k.endsWith('|'+h1Ym)) partialH1 += v; });
+
+  progressCb('Concluído', 1);
+
+  return {
+    featCols, opts, totalBefore, totalAfter, curYm, h1Ym, h2Ym, h1, h2, forecastRows, partialH1, params, supplierBreakdown,
+    classBreakdown, classFornecedorRows, holt, topErrors30, topErrors60, chartData, gbmAccuracyChart, esAccuracyChart,
+    panel, contratosIndex, trainedAt: new Date().toISOString(),
+    nCombos: cur.length, histMin: Math.min(...panel.map(r=>r.ym)), histMax: curYm
+  };
+}
+
+/* ======================================================================
+   COMPARAÇÃO DE HIPERPARÂMETROS (apenas holdout, sem retreino final nem previsão)
+   ====================================================================== */
+async function compareHyperparams(stockRaw, cartasRaw, opts, combos, progressCb){
+  const { panel } = buildPanel(stockRaw, cartasRaw, opts);
+  const featCols = (opts.featCols && opts.featCols.length) ? opts.featCols : DEFAULT_FEAT_SELECTION;
+
+  const results = [];
+  for (let i=0;i<combos.length;i++){
+    const params = combos[i];
+    const baseFrac = i/combos.length;
+    const step = 1/combos.length;
+    const t0 = performance.now();
+    const h1 = await runHorizon(panel, 'target_h1', featCols, params,
+      (msg,frac)=> progressCb(`Combinação ${i+1}/${combos.length} — 30 dias — ${msg}`, baseFrac + step*0.5*frac), true);
+    const h2 = await runHorizon(panel, 'target_h2', featCols, params,
+      (msg,frac)=> progressCb(`Combinação ${i+1}/${combos.length} — 60 dias — ${msg}`, baseFrac + step*0.5 + step*0.5*frac), true);
+    const timeMs = performance.now() - t0;
+    results.push({ params, h1: h1.perf, h2: h2.perf, timeMs });
+  }
+  progressCb('Comparação concluída', 1);
+  return results;
+}
+
+/* ======================================================================
+   RENDERIZAÇÃO
+   ====================================================================== */
+function buildMonthlyChartSvg(chartData){
+  const { monthlyActual, curYm, h1Ym, h2Ym, gbm, es } = chartData;
+  if (!monthlyActual.length){
+    return `<div style="padding:40px 0; text-align:center; color:var(--muted); font-size:13px;">Sem dados para esta combinação de filtros.</div>`;
+  }
+  const w = 900, h = 300, padL = 54, padR = 20, padT = 16, padB = 40;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+
+  const xMin = monthlyActual[0].ym, xMax = h2Ym;
+  const yVals = monthlyActual.map(d=>d.total).concat([gbm.h1, gbm.h2, es.h1, es.h2]);
+  const yMax = Math.max(...yVals) * 1.15 || 1;
+  const X = ym => padL + (ym - xMin) / (xMax - xMin || 1) * innerW;
+  const Y = v => padT + innerH - (v / yMax) * innerH;
+
+  let gridLines = '';
+  const nTicksY = 4;
+  for (let i=0; i<=nTicksY; i++){
+    const v = yMax * i / nTicksY;
+    const y = Y(v);
+    gridLines += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" class="mchart-grid" stroke-width="1"/>`;
+    gridLines += `<text x="${padL-8}" y="${y+4}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="10" class="mchart-axis-text">${fmtInt(v)}</text>`;
+  }
+
+  const lastActual = monthlyActual[monthlyActual.length-1];
+  const actualPoints = monthlyActual.map(d=>`${X(d.ym)},${Y(d.total)}`).join(' ');
+  const gbmPoints = `${X(lastActual.ym)},${Y(lastActual.total)} ${X(h1Ym)},${Y(gbm.h1)} ${X(h2Ym)},${Y(gbm.h2)}`;
+  const esPoints = `${X(lastActual.ym)},${Y(lastActual.total)} ${X(h1Ym)},${Y(es.h1)} ${X(h2Ym)},${Y(es.h2)}`;
+
+  const step = Math.max(1, Math.ceil(monthlyActual.length/7));
+  let xLabels = '';
+  monthlyActual.forEach((d,i) => {
+    if (i % step === 0 || i === monthlyActual.length-1){
+      xLabels += `<text x="${X(d.ym)}" y="${h-padB+18}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" class="mchart-axis-text">${ymLabel(d.ym)}</text>`;
+    }
+  });
+  xLabels += `<text x="${X(h1Ym)}" y="${h-padB+18}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" font-weight="600" class="mchart-h1-text">${ymLabel(h1Ym)}</text>`;
+  xLabels += `<text x="${X(h2Ym)}" y="${h-padB+18}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" font-weight="600" class="mchart-h2-text">${ymLabel(h2Ym)}</text>`;
+
+  const actualDots = monthlyActual.map(d=>`<circle cx="${X(d.ym)}" cy="${Y(d.total)}" r="2.2" class="mchart-actual-dot"/>`).join('');
+  const dividerX = X(lastActual.ym);
+
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block; overflow:visible;">
+    ${gridLines}
+    <line x1="${dividerX}" y1="${padT}" x2="${dividerX}" y2="${h-padB}" class="mchart-divider" stroke-width="1" stroke-dasharray="3,3"/>
+    <polyline points="${actualPoints}" fill="none" class="mchart-actual-line" stroke-width="2"/>
+    <polyline points="${gbmPoints}" fill="none" class="mchart-gbm-line" stroke-width="2" stroke-dasharray="6,4"/>
+    <polyline points="${esPoints}" fill="none" class="mchart-es-line" stroke-width="2" stroke-dasharray="6,4"/>
+    ${actualDots}
+    <circle cx="${X(h1Ym)}" cy="${Y(gbm.h1)}" r="3.5" class="mchart-gbm-dot"/>
+    <circle cx="${X(h2Ym)}" cy="${Y(gbm.h2)}" r="3.5" class="mchart-gbm-dot"/>
+    <circle cx="${X(h1Ym)}" cy="${Y(es.h1)}" r="3.5" class="mchart-es-dot"/>
+    <circle cx="${X(h2Ym)}" cy="${Y(es.h2)}" r="3.5" class="mchart-es-dot"/>
+    ${xLabels}
+  </svg>`;
+}
+
+function renderMonthlyChart(run){
+  document.getElementById('monthlyChartWrap').innerHTML = buildMonthlyChartSvg(run.chartData);
+  const legendItems = [
+    { label:'Puxada real (histórico)', cls:'c-actual', dash:false },
+    { label:'Árvore de decisão (previsão)', cls:'c-gbm', dash:true },
+    { label:'Suavização exponencial (previsão)', cls:'c-es', dash:true },
+  ];
+  document.getElementById('monthlyChartLegend').innerHTML = legendItems.map(li => `
+    <span class="li"><span class="sw ${li.cls}" style="border-top-style:${li.dash ? 'dashed' : 'solid'};"></span>${li.label}</span>
+  `).join('');
+}
+
+// gráfico real x previsto mês a mês (só no período de holdout, onde o valor real já é conhecido)
+function buildAccuracyChartSvg(chartData, predCls){
+  const { monthlyActual, pred30, pred60, holdoutStart } = chartData;
+  if (!monthlyActual.length){
+    return `<div style="padding:40px 0; text-align:center; color:var(--muted); font-size:13px;">Sem dados para esta combinação de filtros.</div>`;
+  }
+  const w = 900, h = 300, padL = 54, padR = 20, padT = 16, padB = 40;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+
+  const xMin = monthlyActual[0].ym, xMax = monthlyActual[monthlyActual.length-1].ym;
+  const yVals = monthlyActual.map(d=>d.total).concat(pred30.map(d=>d.predicted)).concat(pred60.map(d=>d.predicted));
+  const yMax = Math.max(...yVals, 1) * 1.15;
+  const X = ym => padL + (ym - xMin) / (xMax - xMin || 1) * innerW;
+  const Y = v => padT + innerH - (v / yMax) * innerH;
+
+  let gridLines = '';
+  const nTicksY = 4;
+  for (let i=0; i<=nTicksY; i++){
+    const v = yMax * i / nTicksY;
+    const y = Y(v);
+    gridLines += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" class="mchart-grid" stroke-width="1"/>`;
+    gridLines += `<text x="${padL-8}" y="${y+4}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="10" class="mchart-axis-text">${fmtInt(v)}</text>`;
+  }
+
+  const actualPoints = monthlyActual.map(d=>`${X(d.ym)},${Y(d.total)}`).join(' ');
+  const pred30Points = pred30.map(d=>`${X(d.ym)},${Y(d.predicted)}`).join(' ');
+  const pred60Points = pred60.map(d=>`${X(d.ym)},${Y(d.predicted)}`).join(' ');
+
+  const step = Math.max(1, Math.ceil(monthlyActual.length/7));
+  let xLabels = '';
+  monthlyActual.forEach((d,i) => {
+    if (i % step === 0 || i === monthlyActual.length-1){
+      xLabels += `<text x="${X(d.ym)}" y="${h-padB+18}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" class="mchart-axis-text">${ymLabel(d.ym)}</text>`;
+    }
+  });
+
+  const actualDots = monthlyActual.map(d=>`<circle cx="${X(d.ym)}" cy="${Y(d.total)}" r="2.2" class="mchart-actual-dot"/>`).join('');
+  const pred30Dots = pred30.map(d=>`<circle cx="${X(d.ym)}" cy="${Y(d.predicted)}" r="3" class="${predCls}-dot"/>`).join('');
+  const pred60Dots = pred60.map(d=>`<circle cx="${X(d.ym)}" cy="${Y(d.predicted)}" r="3.2" class="${predCls}-dot-hollow"/>`).join('');
+
+  const holdoutInRange = holdoutStart >= xMin && holdoutStart <= xMax;
+  const holdoutLine = holdoutInRange
+    ? `<line x1="${X(holdoutStart)}" y1="${padT}" x2="${X(holdoutStart)}" y2="${h-padB}" class="mchart-divider" stroke-width="1" stroke-dasharray="3,3"/>
+       <text x="${X(holdoutStart)+6}" y="${padT+11}" font-family="IBM Plex Mono, monospace" font-size="9" class="mchart-axis-text">holdout ▸</text>`
+    : '';
+
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block; overflow:visible;">
+    ${gridLines}
+    ${holdoutLine}
+    <polyline points="${actualPoints}" fill="none" class="mchart-actual-line" stroke-width="2"/>
+    <polyline points="${pred30Points}" fill="none" class="${predCls}-line" stroke-width="2" stroke-dasharray="6,4"/>
+    <polyline points="${pred60Points}" fill="none" class="${predCls}-line" stroke-width="2" stroke-dasharray="1.5,3.5"/>
+    ${actualDots}
+    ${pred30Dots}
+    ${pred60Dots}
+    ${xLabels}
+  </svg>`;
+}
+
+function renderAccuracyCharts(run){
+  document.getElementById('gbmAccuracyChartWrap').innerHTML = buildAccuracyChartSvg(run.gbmAccuracyChart, 'mchart-gbm');
+  document.getElementById('esAccuracyChartWrap').innerHTML = buildAccuracyChartSvg(run.esAccuracyChart, 'mchart-es');
+
+  const legendFor = (cls) => [
+    { label:'Puxada real', cls:'c-actual', dash:'solid' },
+    { label:'Previsto D+30', cls:cls, dash:'dashed' },
+    { label:'Previsto D+60', cls:cls, dash:'dotted' },
+  ].map(li => `<span class="li"><span class="sw ${li.cls}" style="border-top-style:${li.dash};"></span>${li.label}</span>`).join('');
+
+  document.getElementById('gbmAccuracyChartLegend').innerHTML = legendFor('c-gbm');
+  document.getElementById('esAccuracyChartLegend').innerHTML = legendFor('c-es');
+}
+
+function renderKpis(run){
+  const el = document.getElementById('kpiGrid');
+  const items = [
+    { label:'Período histórico', value: `${ymLabel(run.histMin)}–${ymLabel(run.histMax)}`, note:'meses de dados usados' },
+    { label:'Combos empresa/regional/SKU', value: fmtInt(run.nCombos), note:`de ${fmtInt(run.totalBefore)} linhas brutas (${fmtInt(run.totalAfter)} após filtros)` },
+    { label:'Previsão D+30', value: fmtInt(run.forecastRows.reduce((s,r)=>s+r.prev_30d,0)), note:ymLabelLong(run.h1Ym), accent:true },
+    { label:'Previsão D+60', value: fmtInt(run.forecastRows.reduce((s,r)=>s+r.prev_60d,0)), note:ymLabelLong(run.h2Ym), accent:true },
+  ];
+  el.innerHTML = items.map(it => `
+    <div class="kpi">
+      <div class="kpi-label">${it.label}</div>
+      <div class="kpi-value ${it.accent?'accent':''}">${it.value}</div>
+      <div class="kpi-note">${it.note}</div>
+    </div>`).join('');
+}
+
+function renderHorizonCard(title, monthLabel, res, targetLabel){
+  const rows = [
+    ['MAE (unidades)', fmtNum(res.perf.mae,1)],
+    ['RMSE (unidades)', fmtNum(res.perf.rmse,1)],
+    ['R²', fmtNum(res.perf.r2,3)],
+    ['MAPE (puxada > 0)', isNaN(res.perf.mape) ? '—' : fmtNum(res.perf.mape,1)+'%'],
+    ['Linhas de teste (holdout)', fmtInt(res.nTest)],
+  ];
+  const imp = Object.entries(res.importance).sort((a,b)=>b[1]-a[1]);
+  const maxImp = imp[0] ? imp[0][1] : 1;
+  return `
+    <div class="horizon-card">
+      <div class="horizon-head">
+        <span class="horizon-name">${title}</span>
+        <span class="horizon-month">${monthLabel}</span>
+      </div>
+      ${rows.map(([l,v])=>`<div class="metric-row"><span class="m-label">${l}</span><span class="m-val">${v}</span></div>`).join('')}
+      <div style="margin-top:16px; font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px;">Importância das variáveis</div>
+      ${imp.map(([f,v])=>`
+        <div class="imp-bar-row">
+          <span class="imp-label">${f}</span>
+          <div class="imp-track"><div class="imp-fill" style="width:${(v/maxImp*100).toFixed(1)}%"></div></div>
+          <span class="imp-val">${(v*100).toFixed(1)}%</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderPerf(run){
+  document.getElementById('perfGrid').innerHTML =
+    renderHorizonCard('30 dias', ymLabel(run.h1Ym), run.h1) +
+    renderHorizonCard('60 dias', ymLabel(run.h2Ym), run.h2);
+  document.getElementById('perfNote').innerHTML =
+    `<b>Como ler:</b> este modelo usou <span class="hl">${run.params.nEstimators} árvores</span>, ` +
+    `<span class="hl">profundidade ${run.params.maxDepth}</span> e <span class="hl">learning rate ${run.params.lr}</span> ` +
+    `(subsample fixo em ${Math.round(run.params.subsample*100)}%), validado com holdout temporal (últimos 3 meses de alvo conhecido, ` +
+    `nunca vistos no treino) e depois retreinado com todo o histórico para gerar a previsão final. MAPE alto é esperado em SKUs de ` +
+    `baixo volume — use o MAE como referência mais estável.`;
+}
+
+const TABLE_COLS = [
+  { key:'cod_empresa', label:'Empresa', type:'txt' },
+  { key:'cod_regional', label:'Regional', type:'txt' },
+  { key:'cod_mat', label:'SKU', type:'txt' },
+  { key:'desc_mat', label:'Descrição', type:'txt' },
+  { key:'Demanda_M0', label:'Demanda M0', type:'num' },
+  { key:'Demanda_M1', label:'Demanda M1', type:'num' },
+  { key:'CMM_3', label:'CMM 3m', type:'num' },
+  { key:'CMM_6', label:'CMM 6m', type:'num' },
+  { key:'Estoque_N3', label:'Estoque N3', type:'num' },
+  { key:'Compra_em_aberto', label:'Compra aberto', type:'num' },
+  { key:'puxada_t', label:'Puxada mês atual', type:'num' },
+  { key:'prev_30d', label:'Previsão D+30 (árvore)', type:'num' },
+  { key:'prev_60d', label:'Previsão D+60 (árvore)', type:'num' },
+  { key:'es_30d', label:'Previsão D+30 (suaviz. exp.)', type:'num' },
+  { key:'es_60d', label:'Previsão D+60 (suaviz. exp.)', type:'num' },
+];
+
+let sortState = { key:'cod_empresa', asc:true };
+let filterText = '';
+
+function getFilteredSorted(rows){
+  let out = rows;
+  if (filterText){
+    const q = filterText.toLowerCase();
+    out = out.filter(r => `${r.cod_empresa} ${r.cod_regional} ${r.cod_mat} ${r.desc_mat}`.toLowerCase().includes(q));
+  }
+  out = out.slice().sort((a,b)=>{
+    const va = a[sortState.key], vb = b[sortState.key];
+    let cmp;
+    if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+    else cmp = String(va).localeCompare(String(vb));
+    return sortState.asc ? cmp : -cmp;
+  });
+  return out;
+}
+
+function renderTableHead(){
+  const head = document.getElementById('tableHeadRow');
+  head.innerHTML = TABLE_COLS.map(c => {
+    const sorted = sortState.key===c.key;
+    return `<th data-key="${c.key}" class="${sorted?'sorted':''} ${sorted&&sortState.asc?'asc':''}">${c.label}</th>`;
+  }).join('');
+  head.querySelectorAll('th').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const k = th.dataset.key;
+      if (sortState.key===k) sortState.asc = !sortState.asc;
+      else { sortState.key = k; sortState.asc = true; }
+      renderTableHead();
+      renderTableBody(lastRun.forecastRows);
+    });
+  });
+}
+
+function renderTableBody(rows){
+  const data = getFilteredSorted(rows);
+  const body = document.getElementById('tableBody');
+  body.innerHTML = data.map(r => `<tr>${TABLE_COLS.map(c=>{
+    const v = r[c.key];
+    const cls = c.type==='txt' ? 'txt' : 'num-right';
+    const val = c.type==='txt' ? v : fmtInt(v);
+    return `<td class="${cls}">${val}</td>`;
+  }).join('')}</tr>`).join('');
+
+  const foot = document.getElementById('tableFootRow');
+  const totalCols = ['puxada_t','prev_30d','prev_60d','es_30d','es_60d'];
+  foot.innerHTML = TABLE_COLS.map(c=>{
+    if (c.key==='cod_mat') return `<td>TOTAL (${data.length} skus)</td>`;
+    if (totalCols.includes(c.key)) return `<td class="num-right">${fmtInt(data.reduce((s,r)=>s+r[c.key],0))}</td>`;
+    return `<td></td>`;
+  }).join('');
+}
+
+function renderResults(run){
+  lastRun = run;
+  document.getElementById('resultsSection').style.display = 'block';
+  initChartFilters(run);
+  renderMonthlyChart(run);
+  renderAccuracyCharts(run);
+  renderKpis(run);
+  renderPerf(run);
+  renderModelComparison(run);
+  renderTopErrors(run);
+  renderTableHead();
+  renderTableBody(run.forecastRows);
+  renderSupplierSection(run);
+  renderClassSection(run);
+}
+
+/* ======================================================================
+   FILTROS DOS GRÁFICOS (empresa / regional / fornecedor) — recalcula sem retreinar
+   ====================================================================== */
+let empresaRegionaisMap = new Map();
+
+function initChartFilters(run){
+  const empresaSel = document.getElementById('cfEmpresa');
+  const regionalSel = document.getElementById('cfRegional');
+  const fornecedorSel = document.getElementById('cfFornecedor');
+  const note = document.getElementById('cfNote');
+
+  empresaRegionaisMap = new Map();
+  run.panel.forEach(r => {
+    if (!empresaRegionaisMap.has(r.cod_empresa)) empresaRegionaisMap.set(r.cod_empresa, new Set());
+    empresaRegionaisMap.get(r.cod_empresa).add(r.cod_regional);
+  });
+  const empresas = Array.from(empresaRegionaisMap.keys()).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
+  empresaSel.innerHTML = '<option value="Todas">Todas</option>' + empresas.map(e=>`<option value="${e}">${e}</option>`).join('');
+  empresaSel.value = 'Todas';
+
+  populateRegionalOptions('Todas');
+
+  let fornecedores = [];
+  if (run.contratosIndex){
+    const set = new Set();
+    run.contratosIndex.forEach(list => list.forEach(c => set.add(c.nomecdr)));
+    fornecedores = Array.from(set).sort((a,b)=>a.localeCompare(b));
+  }
+  if (fornecedores.length){
+    fornecedorSel.disabled = false;
+    fornecedorSel.innerHTML = '<option value="Todos">Todos</option>' + fornecedores.map(f=>`<option value="${f}">${f}</option>`).join('');
+    note.textContent = '';
+  } else {
+    fornecedorSel.disabled = true;
+    fornecedorSel.innerHTML = '<option value="Todos">Todos</option>';
+    note.textContent = 'Filtro de fornecedor indisponível — suba uma base com a aba f_contratos para ativá-lo.';
+  }
+  fornecedorSel.value = 'Todos';
+
+  function populateRegionalOptions(empresaVal){
+    let regs;
+    if (empresaVal === 'Todas'){
+      const all = new Set();
+      empresaRegionaisMap.forEach(set => set.forEach(r=>all.add(r)));
+      regs = Array.from(all);
+    } else {
+      regs = Array.from(empresaRegionaisMap.get(empresaVal) || []);
+    }
+    regs.sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
+    regionalSel.innerHTML = '<option value="Todas">Todas</option>' + regs.map(r=>`<option value="${r}">${r}</option>`).join('');
+    regionalSel.value = 'Todas';
+  }
+  // expõe pro handler de mudança de empresa
+  initChartFilters._populateRegional = populateRegionalOptions;
+
+  empresaSel.onchange = () => {
+    initChartFilters._populateRegional(empresaSel.value);
+    applyChartFilters();
+  };
+  regionalSel.onchange = applyChartFilters;
+  fornecedorSel.onchange = applyChartFilters;
+  document.getElementById('cfClearBtn').onclick = () => {
+    empresaSel.value = 'Todas';
+    initChartFilters._populateRegional('Todas');
+    fornecedorSel.value = 'Todos';
+    applyChartFilters();
+  };
+}
+
+function applyChartFilters(){
+  if (!lastRun) return;
+  const filters = {
+    empresa: document.getElementById('cfEmpresa').value,
+    regional: document.getElementById('cfRegional').value,
+    fornecedor: document.getElementById('cfFornecedor').value,
+  };
+  const { chartData, gbmAccuracyChart, esAccuracyChart } = computeChartDatasets(
+    lastRun.panel, lastRun.h1.finalModel, lastRun.h2.finalModel, lastRun.contratosIndex, filters
+  );
+  lastRun.chartData = chartData;
+  lastRun.gbmAccuracyChart = gbmAccuracyChart;
+  lastRun.esAccuracyChart = esAccuracyChart;
+  renderMonthlyChart(lastRun);
+  renderAccuracyCharts(lastRun);
+}
+
+function renderTopErrorsTable(bodyId, rows){
+  const body = document.getElementById(bodyId);
+  body.innerHTML = rows.map(r => `
+    <tr>
+      <td class="num-right">${r.rank}</td>
+      <td class="txt">${r.cod_empresa}</td>
+      <td class="txt">${r.cod_regional}</td>
+      <td class="txt">${r.cod_mat}</td>
+      <td class="num-right">${fmtNum(r.mae,1)}</td>
+      <td class="num-right">${fmtNum(r.meanActual,1)}</td>
+      <td class="num-right">${fmtNum(r.meanPredicted,1)}</td>
+      <td class="txt">${r.nomecdr}${r.pct!==null ? ` (${(r.pct*100).toFixed(0)}%)` : ''}</td>
+    </tr>`).join('');
+}
+
+function renderTopErrors(run){
+  renderTopErrorsTable('topErr30Body', run.topErrors30);
+  renderTopErrorsTable('topErr60Body', run.topErrors60);
+}
+
+function buildTopErrorsCsv(run){
+  const cols = [
+    ['Horizonte','Rank','Empresa','Regional','SKU','Descrição','Meses testados','MAE','Real médio','Previsto médio','Fornecedor','% Contrato']
+  ];
+  const addRows = (rows, label) => rows.forEach(r => cols.push([
+    label, r.rank, r.cod_empresa, r.cod_regional, r.cod_mat, r.desc_mat, r.nMeses,
+    r.mae.toFixed(2), r.meanActual.toFixed(2), r.meanPredicted.toFixed(2), r.nomecdr, r.pct!==null ? (r.pct*100).toFixed(1) : ''
+  ]));
+  addRows(run.topErrors30, '30 dias');
+  addRows(run.topErrors60, '60 dias');
+  return cols.map(row => row.join(';')).join('\n');
+}
+
+function downloadTopErrorsCsv(){
+  if (!lastRun) return;
+  const csv = buildTopErrorsCsv(lastRun);
+  const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `top10_erros_previsao_${ymLabel(lastRun.h1Ym)}_${ymLabel(lastRun.h2Ym)}.csv`.replace(/\//g,'-');
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function renderModelComparison(run){
+  const rows = [
+    { horizonte:'30 dias', modelo:'Árvore de decisão (GBM)', p:run.h1.perf },
+    { horizonte:'30 dias', modelo:'Suavização exponencial', p:run.holt.h1.perf },
+    { horizonte:'60 dias', modelo:'Árvore de decisão (GBM)', p:run.h2.perf },
+    { horizonte:'60 dias', modelo:'Suavização exponencial', p:run.holt.h2.perf },
+  ];
+  const body = document.getElementById('modelCompareBody');
+  body.innerHTML = rows.map((r,i) => {
+    const isGbm = r.modelo.startsWith('Árvore');
+    const pairMae = isGbm ? Math.min(r.p.mae, rows[i+1].p.mae) : Math.min(r.p.mae, rows[i-1].p.mae);
+    const isBest = r.p.mae === pairMae;
+    return `<tr${isBest ? ' style="background:var(--accent-soft);"' : ''}>
+      <td class="txt">${r.horizonte}</td>
+      <td class="txt">${r.modelo}${isBest ? ' <span class="hl">▸ menor erro</span>' : ''}</td>
+      <td class="num-right">${fmtNum(r.p.mae,1)}</td>
+      <td class="num-right">${fmtNum(r.p.rmse,1)}</td>
+      <td class="num-right">${fmtNum(r.p.r2,3)}</td>
+      <td class="num-right">${isNaN(r.p.mape) ? '—' : fmtNum(r.p.mape,1)+'%'}</td>
+    </tr>`;
+  }).join('');
+
+  const gbmWins30 = run.h1.perf.mae <= run.holt.h1.perf.mae;
+  const gbmWins60 = run.h2.perf.mae <= run.holt.h2.perf.mae;
+  const pct = (a,b) => b>0 ? (100*(b-a)/b).toFixed(0) : '0';
+  let msg = '';
+  if (gbmWins30 && gbmWins60){
+    msg = `A árvore de decisão teve MAE menor que a suavização exponencial nos dois horizontes — ` +
+      `${pct(run.h1.perf.mae, run.holt.h1.perf.mae)}% menor em 30 dias e ${pct(run.h2.perf.mae, run.holt.h2.perf.mae)}% menor em 60 dias. ` +
+      `As variáveis de estoque/demanda estão agregando valor real sobre um modelo que olha só o histórico de puxada.`;
+  } else if (!gbmWins30 && !gbmWins60){
+    msg = `A suavização exponencial teve MAE menor que a árvore nos dois horizontes — vale revisar as variáveis explicativas ou os ` +
+      `hiperparâmetros antes de confiar na árvore, já que o modelo simples está indo melhor.`;
+  } else {
+    msg = `Resultado misto: um dos horizontes favorece a árvore e o outro a suavização exponencial — olhe o MAE de cada linha acima ` +
+      `para decidir caso a caso.`;
+  }
+  document.getElementById('modelCompareNote').innerHTML = `<b>Leitura:</b> ${msg}`;
+}
+
+/* ======================================================================
+   PREVISÃO POR FORNECEDOR
+   ====================================================================== */
+const SUPPLIER_TABLE_COLS = [
+  { key:'cod_empresa', label:'Empresa', type:'txt' },
+  { key:'cod_regional', label:'Regional', type:'txt' },
+  { key:'cod_mat', label:'SKU', type:'txt' },
+  { key:'desc_mat', label:'Descrição', type:'txt' },
+  { key:'nomecdr', label:'Fornecedor', type:'txt' },
+  { key:'pct', label:'% Contrato', type:'pct' },
+  { key:'prev_30d', label:'Previsão D+30', type:'num' },
+  { key:'prev_60d', label:'Previsão D+60', type:'num' },
+];
+let fornSortState = { key:'cod_empresa', asc:true };
+let fornFilterText = '';
+
+function getFornFilteredSorted(rows){
+  let out = rows;
+  if (fornFilterText){
+    const q = fornFilterText.toLowerCase();
+    out = out.filter(r => `${r.cod_empresa} ${r.cod_regional} ${r.cod_mat} ${r.desc_mat} ${r.nomecdr}`.toLowerCase().includes(q));
+  }
+  out = out.slice().sort((a,b)=>{
+    const va = a[fornSortState.key], vb = b[fornSortState.key];
+    let cmp;
+    if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+    else cmp = String(va).localeCompare(String(vb));
+    return fornSortState.asc ? cmp : -cmp;
+  });
+  return out;
+}
+
+function renderFornTableHead(){
+  const head = document.getElementById('fornTableHeadRow');
+  head.innerHTML = SUPPLIER_TABLE_COLS.map(c => {
+    const sorted = fornSortState.key===c.key;
+    return `<th data-key="${c.key}" class="${sorted?'sorted':''} ${sorted&&fornSortState.asc?'asc':''}">${c.label}</th>`;
+  }).join('');
+  head.querySelectorAll('th').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const k = th.dataset.key;
+      if (fornSortState.key===k) fornSortState.asc = !fornSortState.asc;
+      else { fornSortState.key = k; fornSortState.asc = true; }
+      renderFornTableHead();
+      renderFornTableBody(lastRun.supplierBreakdown.detailRows);
+    });
+  });
+}
+
+function renderFornTableBody(rows){
+  const data = getFornFilteredSorted(rows);
+  const body = document.getElementById('fornTableBody');
+  body.innerHTML = data.map(r => `<tr${r.semContrato ? ' style="color:var(--muted-2); font-style:italic;"' : ''}>${SUPPLIER_TABLE_COLS.map(c=>{
+    const v = r[c.key];
+    if (c.type==='txt') return `<td class="txt">${v}</td>`;
+    if (c.type==='pct') return `<td class="num-right">${(v*100).toFixed(0)}%</td>`;
+    return `<td class="num-right">${fmtInt(v)}</td>`;
+  }).join('')}</tr>`).join('');
+
+  const foot = document.getElementById('fornTableFootRow');
+  foot.innerHTML = SUPPLIER_TABLE_COLS.map(c=>{
+    if (c.key==='cod_mat') return `<td>TOTAL (${data.length} linhas)</td>`;
+    if (c.key==='prev_30d' || c.key==='prev_60d') return `<td class="num-right">${fmtInt(data.reduce((s,r)=>s+r[c.key],0))}</td>`;
+    return `<td></td>`;
+  }).join('');
+}
+
+function renderSupplierAgg(run){
+  const agg = run.supplierBreakdown.aggByFornecedor;
+  const el = document.getElementById('fornAggBody');
+  el.innerHTML = agg.map(a => `
+    <tr${a.semContrato ? ' style="color:var(--muted-2); font-style:italic;"' : ''}>
+      <td class="txt">${a.nomecdr}</td>
+      <td class="num-right">${fmtInt(a.combos)}</td>
+      <td class="num-right">${fmtInt(a.prev_30d)}</td>
+      <td class="num-right">${(a.share30*100).toFixed(1)}%</td>
+      <td class="num-right">${fmtInt(a.prev_60d)}</td>
+      <td class="num-right">${(a.share60*100).toFixed(1)}%</td>
+    </tr>`).join('');
+}
+
+function renderSupplierSection(run){
+  const section = document.getElementById('supplierSection');
+  const noContratos = document.getElementById('supplierNoContratos');
+  if (!run.supplierBreakdown){
+    section.style.display = 'none';
+    noContratos.style.display = 'block';
+    return;
+  }
+  noContratos.style.display = 'none';
+  section.style.display = 'block';
+
+  const sb = run.supplierBreakdown;
+  document.getElementById('fornKpiGrid').innerHTML = [
+    { label:'Fornecedores únicos', value: fmtInt(sb.aggByFornecedor.filter(a=>!a.semContrato).length) },
+    { label:'Combos com contrato cadastrado', value: `${fmtInt(sb.combosComContrato)} / ${fmtInt(sb.totalCombos)}` },
+    { label:'Combos sem nenhum contrato', value: fmtInt(sb.combosSemContrato), note: sb.combosSemContrato>0 ? '100% alocado como "sem contrato"' : '' },
+  ].map(it => `
+    <div class="kpi">
+      <div class="kpi-label">${it.label}</div>
+      <div class="kpi-value">${it.value}</div>
+      ${it.note ? `<div class="kpi-note">${it.note}</div>` : ''}
+    </div>`).join('');
+
+  renderSupplierAgg(run);
+  renderFornTableHead();
+  renderFornTableBody(sb.detailRows);
+}
+
+/* ======================================================================
+   PREVISÃO POR CLASSE DE SKU
+   ====================================================================== */
+const CLASSFORN_TABLE_COLS = [
+  { key:'cod_empresa', label:'Empresa', type:'txt' },
+  { key:'cod_regional', label:'Regional', type:'txt' },
+  { key:'classe', label:'Classe', type:'txt' },
+  { key:'nomecdr', label:'Fornecedor', type:'txt' },
+  { key:'nSkus', label:'SKUs', type:'num' },
+  { key:'prev_30d', label:'Previsão D+30', type:'num' },
+  { key:'prev_60d', label:'Previsão D+60', type:'num' },
+];
+let classSortState = { key:'cod_empresa', asc:true };
+let classFilterText = '';
+
+function getClassFilteredSorted(rows){
+  let out = rows;
+  if (classFilterText){
+    const q = classFilterText.toLowerCase();
+    out = out.filter(r => `${r.cod_empresa} ${r.cod_regional} ${r.classe} ${r.nomecdr}`.toLowerCase().includes(q));
+  }
+  out = out.slice().sort((a,b)=>{
+    const va = a[classSortState.key], vb = b[classSortState.key];
+    let cmp;
+    if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+    else cmp = String(va).localeCompare(String(vb));
+    return classSortState.asc ? cmp : -cmp;
+  });
+  return out;
+}
+
+function renderClassTableHead(){
+  const head = document.getElementById('classTableHeadRow');
+  head.innerHTML = CLASSFORN_TABLE_COLS.map(c => {
+    const sorted = classSortState.key===c.key;
+    return `<th data-key="${c.key}" class="${sorted?'sorted':''} ${sorted&&classSortState.asc?'asc':''}">${c.label}</th>`;
+  }).join('');
+  head.querySelectorAll('th').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const k = th.dataset.key;
+      if (classSortState.key===k) classSortState.asc = !classSortState.asc;
+      else { classSortState.key = k; classSortState.asc = true; }
+      renderClassTableHead();
+      renderClassTableBody(lastRun.classFornecedorRows);
+    });
+  });
+}
+
+function renderClassTableBody(rows){
+  const data = getClassFilteredSorted(rows);
+  const body = document.getElementById('classTableBody');
+  body.innerHTML = data.map(r => `<tr${r.semContrato ? ' style="color:var(--muted-2); font-style:italic;"' : ''}>${CLASSFORN_TABLE_COLS.map(c=>{
+    const v = r[c.key];
+    const cls = c.type==='txt' ? 'txt' : 'num-right';
+    const val = c.type==='txt' ? v : fmtInt(v);
+    return `<td class="${cls}">${val}</td>`;
+  }).join('')}</tr>`).join('');
+
+  const foot = document.getElementById('classTableFootRow');
+  foot.innerHTML = CLASSFORN_TABLE_COLS.map(c=>{
+    if (c.key==='classe') return `<td>TOTAL (${data.length} linhas)</td>`;
+    if (c.key==='prev_30d' || c.key==='prev_60d') return `<td class="num-right">${fmtInt(data.reduce((s,r)=>s+r[c.key],0))}</td>`;
+    return `<td></td>`;
+  }).join('');
+}
+
+function renderClassAgg(run){
+  const agg = run.classBreakdown;
+  const el = document.getElementById('classAggBody');
+  el.innerHTML = agg.map(a => `
+    <tr>
+      <td class="txt">${a.classe}</td>
+      <td class="num-right">${fmtInt(a.combos)}</td>
+      <td class="num-right">${fmtInt(a.prev_30d)}</td>
+      <td class="num-right">${(a.share30*100).toFixed(1)}%</td>
+      <td class="num-right">${fmtInt(a.prev_60d)}</td>
+      <td class="num-right">${(a.share60*100).toFixed(1)}%</td>
+    </tr>`).join('');
+}
+
+function renderClassSection(run){
+  const section = document.getElementById('classSection');
+  const noClass = document.getElementById('classNoData');
+  if (!run.classBreakdown){
+    section.style.display = 'none';
+    noClass.style.display = 'block';
+    return;
+  }
+  noClass.style.display = 'none';
+  section.style.display = 'block';
+
+  document.getElementById('classKpiGrid').innerHTML = [
+    { label:'Classes de SKU', value: fmtInt(run.classBreakdown.length) },
+    { label:'SKUs sem classificação', value: fmtInt(run.classBreakdown.find(c=>c.classe===SEM_CLASSE_LABEL)?.combos || 0) },
+  ].map(it => `
+    <div class="kpi">
+      <div class="kpi-label">${it.label}</div>
+      <div class="kpi-value">${it.value}</div>
+    </div>`).join('');
+
+  renderClassAgg(run);
+
+  const detailWrap = document.getElementById('classFornDetailWrap');
+  if (run.classFornecedorRows){
+    detailWrap.style.display = 'block';
+    renderClassTableHead();
+    renderClassTableBody(run.classFornecedorRows);
+  } else {
+    detailWrap.style.display = 'none';
+  }
+}
+
+/* ======================================================================
+   EXPORTAÇÃO
+   ====================================================================== */
+function buildCsv(run){
+  const header = TABLE_COLS.map(c=>c.label).join(';');
+  const lines = getFilteredSorted(run.forecastRows).map(r =>
+    TABLE_COLS.map(c=> r[c.key]).join(';')
+  );
+  return [header, ...lines].join('\n');
+}
+
+function downloadCsv(){
+  if (!lastRun) return;
+  const csv = buildCsv(lastRun);
+  const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `previsao_puxada_${ymLabel(lastRun.h1Ym)}_${ymLabel(lastRun.h2Ym)}.csv`.replace(/\//g,'-');
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildFornCsv(run){
+  const header = SUPPLIER_TABLE_COLS.map(c=>c.label).join(';');
+  const lines = getFornFilteredSorted(run.supplierBreakdown.detailRows).map(r =>
+    SUPPLIER_TABLE_COLS.map(c=> c.type==='pct' ? (r[c.key]*100).toFixed(1) : r[c.key]).join(';')
+  );
+  return [header, ...lines].join('\n');
+}
+
+function downloadFornCsv(){
+  if (!lastRun || !lastRun.supplierBreakdown) return;
+  const csv = buildFornCsv(lastRun);
+  const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `previsao_por_fornecedor_${ymLabel(lastRun.h1Ym)}_${ymLabel(lastRun.h2Ym)}.csv`.replace(/\//g,'-');
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildClassFornCsv(run){
+  const header = CLASSFORN_TABLE_COLS.map(c=>c.label).join(';');
+  const lines = getClassFilteredSorted(run.classFornecedorRows).map(r =>
+    CLASSFORN_TABLE_COLS.map(c=> r[c.key]).join(';')
+  );
+  return [header, ...lines].join('\n');
+}
+
+function downloadClassCsv(){
+  if (!lastRun || !lastRun.classFornecedorRows) return;
+  const csv = buildClassFornCsv(lastRun);
+  const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `previsao_por_classe_fornecedor_${ymLabel(lastRun.h1Ym)}_${ymLabel(lastRun.h2Ym)}.csv`.replace(/\//g,'-');
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadXlsx(){
+  if (!lastRun) return;
+  const run = lastRun;
+  const wb = XLSX.utils.book_new();
+
+  const metaRows = [
+    ['Forecast de Puxada de Postes junto a Fornecedores (30 e 60 dias)'],
+    [],
+    ['Período histórico', `${ymLabel(run.histMin)} a ${ymLabel(run.histMax)}`],
+    ['Combinações empresa/regional/SKU', run.nCombos],
+    ['Filtro poste aplicado', document.getElementById('optPoste').checked ? 'sim' : 'não'],
+    ['Filtro CMM_12 > 0 aplicado', document.getElementById('optCmm12').checked ? 'sim' : 'não'],
+    ['Variáveis preditoras', run.featCols.join(', ')],
+    ['Algoritmo', `Gradient Boosting Regressor — ${run.params.nEstimators} árvores, profundidade ${run.params.maxDepth}, learning rate ${run.params.lr}, subsample ${Math.round(run.params.subsample*100)}%`],
+    ['Validação', 'Holdout temporal (últimos 3 meses de alvo conhecido); modelo final retreinado com todo o histórico'],
+    ['Benchmark de comparação', `Suavização exponencial de Holt (alpha=${run.holt.params.alpha}, beta=${run.holt.params.beta}), usando só o histórico de puxada de cada SKU`],
+    ['Snapshot base da previsão', ymLabelLong(run.curYm)],
+    ['Mês alvo D+30', ymLabelLong(run.h1Ym)],
+    ['Mês alvo D+60', ymLabelLong(run.h2Ym)],
+    ['Pedidos já parcialmente lançados para o mês D+30 (referência, não somar à previsão)', run.partialH1],
+  ];
+  const wsMeta = XLSX.utils.aoa_to_sheet(metaRows);
+  wsMeta['!cols'] = [{wch:70},{wch:50}];
+  XLSX.utils.book_append_sheet(wb, wsMeta, 'Metodologia');
+
+  const perfRows = [
+    ['Horizonte','MAE','RMSE','R²','MAPE (%)','Linhas teste'],
+    ['30 dias', run.h1.perf.mae, run.h1.perf.rmse, run.h1.perf.r2, run.h1.perf.mape, run.h1.perf.n],
+    ['60 dias', run.h2.perf.mae, run.h2.perf.rmse, run.h2.perf.r2, run.h2.perf.mape, run.h2.perf.n],
+    [],
+    ['Importância das variáveis — 30 dias'],
+    ...Object.entries(run.h1.importance).sort((a,b)=>b[1]-a[1]).map(([f,v])=>[f, v]),
+    [],
+    ['Importância das variáveis — 60 dias'],
+    ...Object.entries(run.h2.importance).sort((a,b)=>b[1]-a[1]).map(([f,v])=>[f, v]),
+  ];
+  const wsPerf = XLSX.utils.aoa_to_sheet(perfRows);
+  wsPerf['!cols'] = [{wch:32},{wch:14},{wch:14},{wch:10},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsPerf, 'Desempenho do Modelo');
+
+  const compareRows = [
+    ['Horizonte','Modelo','MAE','RMSE','R²','MAPE (%)'],
+    ['30 dias','Árvore de decisão (GBM)', run.h1.perf.mae, run.h1.perf.rmse, run.h1.perf.r2, run.h1.perf.mape],
+    ['30 dias','Suavização exponencial (Holt)', run.holt.h1.perf.mae, run.holt.h1.perf.rmse, run.holt.h1.perf.r2, run.holt.h1.perf.mape],
+    ['60 dias','Árvore de decisão (GBM)', run.h2.perf.mae, run.h2.perf.rmse, run.h2.perf.r2, run.h2.perf.mape],
+    ['60 dias','Suavização exponencial (Holt)', run.holt.h2.perf.mae, run.holt.h2.perf.rmse, run.holt.h2.perf.r2, run.holt.h2.perf.mape],
+  ];
+  const wsCompare = XLSX.utils.aoa_to_sheet(compareRows);
+  wsCompare['!cols'] = [{wch:14},{wch:30},{wch:12},{wch:12},{wch:10},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsCompare, 'Comparacao_Modelos');
+
+  const topErrCols = ['rank','cod_empresa','cod_regional','cod_mat','desc_mat','nMeses','mae','meanActual','meanPredicted','nomecdr','pct'];
+  const topErrLabels = ['#','Empresa','Regional','SKU','Descrição','Meses testados','MAE','Real médio','Previsto médio','Fornecedor','% Contrato'];
+  function toTopErrSheet(rows){
+    return rows.map(r => topErrCols.reduce((o,c,i)=>{
+      o[topErrLabels[i]] = c==='pct' ? (r[c]!==null ? +(r[c]*100).toFixed(1) : '') : r[c];
+      return o;
+    }, {}));
+  }
+  const wsTop30 = XLSX.utils.json_to_sheet(toTopErrSheet(run.topErrors30));
+  wsTop30['!cols'] = [{wch:5},{wch:10},{wch:10},{wch:9},{wch:32},{wch:14},{wch:10},{wch:12},{wch:14},{wch:30},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsTop30, 'Top10_Erros_30d');
+
+  const wsTop60 = XLSX.utils.json_to_sheet(toTopErrSheet(run.topErrors60));
+  wsTop60['!cols'] = wsTop30['!cols'];
+  XLSX.utils.book_append_sheet(wb, wsTop60, 'Top10_Erros_60d');
+
+  const dataRows = getFilteredSorted(run.forecastRows).map(r => TABLE_COLS.reduce((o,c)=>{ o[c.label]=r[c.key]; return o; }, {}));
+  const wsData = XLSX.utils.json_to_sheet(dataRows);
+  wsData['!cols'] = TABLE_COLS.map(c=> ({wch: c.type==='txt' ? 30 : 14}));
+  XLSX.utils.book_append_sheet(wb, wsData, 'Previsao_30_60_dias');
+
+  if (run.supplierBreakdown){
+    const sb = run.supplierBreakdown;
+    const aggRows = sb.aggByFornecedor.map(a => ({
+      'Fornecedor': a.nomecdr, 'Combos atendidos': a.combos,
+      'Previsão D+30': a.prev_30d, 'Participação D+30 (%)': +(a.share30*100).toFixed(1),
+      'Previsão D+60': a.prev_60d, 'Participação D+60 (%)': +(a.share60*100).toFixed(1),
+    }));
+    const wsAgg = XLSX.utils.json_to_sheet(aggRows);
+    wsAgg['!cols'] = [{wch:38},{wch:16},{wch:14},{wch:18},{wch:14},{wch:18}];
+    XLSX.utils.book_append_sheet(wb, wsAgg, 'Resumo_por_Fornecedor');
+
+    const detailRows = getFornFilteredSorted(sb.detailRows).map(r => SUPPLIER_TABLE_COLS.reduce((o,c)=>{
+      o[c.label] = c.type==='pct' ? +(r[c.key]*100).toFixed(1) : r[c.key];
+      return o;
+    }, {}));
+    const wsDetail = XLSX.utils.json_to_sheet(detailRows);
+    wsDetail['!cols'] = SUPPLIER_TABLE_COLS.map(c=> ({wch: c.type==='txt' ? 30 : 14}));
+    XLSX.utils.book_append_sheet(wb, wsDetail, 'Previsao_por_Fornecedor');
+  }
+
+  if (run.classBreakdown){
+    const classAggRows = run.classBreakdown.map(a => ({
+      'Classe': a.classe, 'Combos': a.combos,
+      'Previsão D+30': a.prev_30d, 'Participação D+30 (%)': +(a.share30*100).toFixed(1),
+      'Previsão D+60': a.prev_60d, 'Participação D+60 (%)': +(a.share60*100).toFixed(1),
+    }));
+    const wsClassAgg = XLSX.utils.json_to_sheet(classAggRows);
+    wsClassAgg['!cols'] = [{wch:22},{wch:12},{wch:14},{wch:18},{wch:14},{wch:18}];
+    XLSX.utils.book_append_sheet(wb, wsClassAgg, 'Resumo_por_Classe');
+
+    if (run.classFornecedorRows){
+      const classFornRows = getClassFilteredSorted(run.classFornecedorRows).map(r => CLASSFORN_TABLE_COLS.reduce((o,c)=>{
+        o[c.label] = r[c.key]; return o;
+      }, {}));
+      const wsClassForn = XLSX.utils.json_to_sheet(classFornRows);
+      wsClassForn['!cols'] = CLASSFORN_TABLE_COLS.map(c=> ({wch: c.type==='txt' ? 26 : 14}));
+      XLSX.utils.book_append_sheet(wb, wsClassForn, 'Previsao_Classe_Fornecedor');
+    }
+  }
+
+  XLSX.writeFile(wb, `Forecast_Puxada_Postes_${ymLabel(run.h1Ym)}_${ymLabel(run.h2Ym)}.xlsx`.replace(/\//g,'-'));
+}
+
+/* ======================================================================
+   EVENTOS DE UI
+   ====================================================================== */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileNamePill = document.getElementById('fileNamePill');
+const trainBtn = document.getElementById('trainBtn');
+const errBox = document.getElementById('errBox');
+const statusText = document.getElementById('statusText');
+const progressSection = document.getElementById('progressSection');
+const progStage = document.getElementById('progStage');
+const progPct = document.getElementById('progPct');
+const progFill = document.getElementById('progFill');
+const resultsSection = document.getElementById('resultsSection');
+
+function setFile(file){
+  if (!file) return;
+  const ok = /\.(xlsx|xls)$/i.test(file.name);
+  if (!ok){
+    errBox.textContent = 'Formato não reconhecido. Envie um arquivo .xlsx ou .xls.';
+    return;
+  }
+  errBox.textContent = '';
+  uploadedFile = file;
+  fileNamePill.innerHTML = `<span class="filename-pill"><span class="dot"></span>${file.name}</span>`;
+  trainBtn.disabled = false;
+}
+
+dropzone.addEventListener('click', ()=> fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', ()=> dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) setFile(e.target.files[0]); });
+
+function updateProgress(stage, frac){
+  progStage.textContent = stage;
+  const pct = Math.min(100, Math.round(frac*100));
+  progPct.textContent = pct + '%';
+  progFill.style.width = pct + '%';
+}
+
+/* --- variáveis explicativas: checkboxes --- */
+const featErr = document.getElementById('featErr');
+const featCountEl = document.getElementById('featCount');
+const featChecks = Array.from(document.querySelectorAll('.featChk'));
+const DEFAULT_FEAT_SELECTION = ALL_FEAT_COLS.filter(f => !['Consumo_M0','CMM_12','Estoque_N3'].includes(f)); // padrão validado
+
+function getSelectedFeatures(){
+  const checked = new Set(featChecks.filter(el => el.checked).map(el => el.dataset.feat));
+  return ALL_FEAT_COLS.filter(f => checked.has(f));
+}
+function syncFeatCount(){
+  const n = getSelectedFeatures().length;
+  featCountEl.textContent = `${n} de ${ALL_FEAT_COLS.length} variáveis selecionadas`;
+  if (n > 0) featErr.textContent = '';
+}
+featChecks.forEach(el => el.addEventListener('change', syncFeatCount));
+syncFeatCount();
+
+document.getElementById('featAllBtn').addEventListener('click', () => {
+  featChecks.forEach(el => el.checked = true);
+  syncFeatCount();
+});
+document.getElementById('featNoneBtn').addEventListener('click', () => {
+  featChecks.forEach(el => el.checked = false);
+  syncFeatCount();
+});
+document.getElementById('featResetBtn').addEventListener('click', () => {
+  const def = new Set(DEFAULT_FEAT_SELECTION);
+  featChecks.forEach(el => el.checked = def.has(el.dataset.feat));
+  syncFeatCount();
+});
+
+/* --- hiperparâmetros: sliders --- */
+const hpTrees = document.getElementById('hpTrees');
+const hpDepth = document.getElementById('hpDepth');
+const hpLr = document.getElementById('hpLr');
+const hpTreesVal = document.getElementById('hpTreesVal');
+const hpDepthVal = document.getElementById('hpDepthVal');
+const hpLrVal = document.getElementById('hpLrVal');
+const esAlpha = document.getElementById('esAlpha');
+const esBeta = document.getElementById('esBeta');
+const esAlphaVal = document.getElementById('esAlphaVal');
+const esBetaVal = document.getElementById('esBetaVal');
+
+function syncHpLabels(){
+  hpTreesVal.textContent = hpTrees.value;
+  hpDepthVal.textContent = hpDepth.value;
+  hpLrVal.textContent = parseFloat(hpLr.value).toFixed(2).replace('.', ',');
+  esAlphaVal.textContent = parseFloat(esAlpha.value).toFixed(2).replace('.', ',');
+  esBetaVal.textContent = parseFloat(esBeta.value).toFixed(2).replace('.', ',');
+}
+[hpTrees, hpDepth, hpLr, esAlpha, esBeta].forEach(el => el.addEventListener('input', syncHpLabels));
+syncHpLabels();
+
+document.getElementById('resetHpBtn').addEventListener('click', () => {
+  hpTrees.value = DEFAULT_PARAMS.nEstimators;
+  hpDepth.value = DEFAULT_PARAMS.maxDepth;
+  hpLr.value = DEFAULT_PARAMS.lr;
+  esAlpha.value = ES_DEFAULT_PARAMS.alpha;
+  esBeta.value = ES_DEFAULT_PARAMS.beta;
+  syncHpLabels();
+});
+
+trainBtn.addEventListener('click', async () => {
+  if (!uploadedFile) return;
+  errBox.textContent = '';
+  featErr.textContent = '';
+  const featCols = getSelectedFeatures();
+  if (!featCols.length){
+    featErr.textContent = 'Selecione ao menos uma variável explicativa antes de treinar.';
+    return;
+  }
+  trainBtn.disabled = true;
+  statusText.textContent = 'Lendo arquivo…';
+  resultsSection.style.display = 'none';
+  progressSection.style.display = 'block';
+  updateProgress('Lendo arquivo…', 0);
+
+  const opts = {
+    filterPoste: document.getElementById('optPoste').checked,
+    filterCmm12: document.getElementById('optCmm12').checked,
+    featCols,
+  };
+  const params = getParamsFromUI();
+  const esParams = getEsParamsFromUI();
+
+  try {
+    await sleep(30);
+    const { stockRaw, cartasRaw, contratosRaw, classRaw } = await parseFile(uploadedFile);
+    statusText.textContent = `${stockRaw.length.toLocaleString('pt-BR')} linhas em f_stockout · ${cartasRaw.length.toLocaleString('pt-BR')} em f_relatorio_cartas` +
+      (contratosRaw ? ` · ${contratosRaw.length.toLocaleString('pt-BR')} em f_contratos` : '') +
+      (classRaw ? ` · ${classRaw.length.toLocaleString('pt-BR')} em d_class_poste` : '');
+    const run = await trainAndForecast(stockRaw, cartasRaw, contratosRaw, classRaw, opts, params, esParams, updateProgress);
+    renderResults(run);
+    showCurrentModelBanner(run);
+    statusText.textContent = 'Modelo treinado com sucesso.';
+  } catch (err) {
+    console.error(err);
+    errBox.textContent = 'Erro ao processar o arquivo:\n' + err.message;
+    statusText.textContent = '';
+  } finally {
+    progressSection.style.display = 'none';
+    trainBtn.disabled = false;
+  }
+});
+
+/* --- comparação de hiperparâmetros --- */
+const compareBtn = document.getElementById('compareBtn');
+const compareResultsWrap = document.getElementById('compareResultsWrap');
+const compareTableBody = document.getElementById('compareTableBody');
+
+compareBtn.addEventListener('click', async () => {
+  if (!uploadedFile){
+    errBox.textContent = 'Envie um arquivo antes de comparar hiperparâmetros.';
+    return;
+  }
+  errBox.textContent = '';
+  featErr.textContent = '';
+  const featCols = getSelectedFeatures();
+  if (!featCols.length){
+    featErr.textContent = 'Selecione ao menos uma variável explicativa antes de comparar.';
+    return;
+  }
+  compareBtn.disabled = true;
+  trainBtn.disabled = true;
+  progressSection.style.display = 'block';
+  updateProgress('Lendo arquivo…', 0);
+
+  const opts = {
+    filterPoste: document.getElementById('optPoste').checked,
+    filterCmm12: document.getElementById('optCmm12').checked,
+    featCols,
+  };
+
+  try {
+    const { stockRaw, cartasRaw } = await parseFile(uploadedFile);
+    const results = await compareHyperparams(stockRaw, cartasRaw, opts, HP_GRID, updateProgress);
+    renderCompareTable(results);
+  } catch (err) {
+    console.error(err);
+    errBox.textContent = 'Erro ao comparar hiperparâmetros:\n' + err.message;
+  } finally {
+    progressSection.style.display = 'none';
+    compareBtn.disabled = false;
+    trainBtn.disabled = false;
+  }
+});
+
+function renderCompareTable(results){
+  // média simples de R² entre os 2 horizontes para indicar a melhor combinação
+  const withAvg = results.map(r => ({ ...r, avgR2: (r.h1.r2 + r.h2.r2)/2 }));
+  const bestIdx = withAvg.reduce((best,r,i,arr)=> r.avgR2 > arr[best].avgR2 ? i : best, 0);
+
+  compareTableBody.innerHTML = withAvg.map((r,i) => `
+    <tr class="${i===bestIdx?'best':''}">
+      <td>${r.params.nEstimators}</td>
+      <td>${r.params.maxDepth}</td>
+      <td>${r.params.lr}</td>
+      <td>${fmtNum(r.h1.mae,1)}</td>
+      <td>${fmtNum(r.h1.r2,3)}</td>
+      <td>${fmtNum(r.h2.mae,1)}</td>
+      <td>${fmtNum(r.h2.r2,3)}</td>
+      <td>${(r.timeMs/1000).toFixed(1)}s</td>
+      <td><button class="use-combo-btn" data-idx="${i}">usar</button></td>
+    </tr>`).join('');
+
+  compareTableBody.querySelectorAll('.use-combo-btn').forEach(btn=>{
+    btn.addEventListener('click', () => {
+      const r = withAvg[parseInt(btn.dataset.idx,10)];
+      hpTrees.value = r.params.nEstimators;
+      hpDepth.value = r.params.maxDepth;
+      hpLr.value = r.params.lr;
+      syncHpLabels();
+      window.scrollTo({ top: 0, behavior:'smooth' });
+    });
+  });
+  compareResultsWrap.style.display = 'block';
+}
+
+document.getElementById('searchInput').addEventListener('input', e => {
+  filterText = e.target.value;
+  if (lastRun) renderTableBody(lastRun.forecastRows);
+});
+document.getElementById('exportCsvBtn').addEventListener('click', downloadCsv);
+document.getElementById('exportXlsxBtn').addEventListener('click', downloadXlsx);
+
+document.getElementById('fornSearchInput').addEventListener('input', e => {
+  fornFilterText = e.target.value;
+  if (lastRun && lastRun.supplierBreakdown) renderFornTableBody(lastRun.supplierBreakdown.detailRows);
+});
+document.getElementById('exportFornCsvBtn').addEventListener('click', downloadFornCsv);
+
+document.getElementById('classSearchInput').addEventListener('input', e => {
+  classFilterText = e.target.value;
+  if (lastRun && lastRun.classFornecedorRows) renderClassTableBody(lastRun.classFornecedorRows);
+});
+document.getElementById('exportClassCsvBtn').addEventListener('click', downloadClassCsv);
+document.getElementById('exportTopErrCsvBtn').addEventListener('click', downloadTopErrorsCsv);
+
+/* ======================================================================
+   MODELO PRÉ-TREINADO — banner "Modelo atual" e fluxo de atualização rápida
+   ====================================================================== */
+function fmtTrainedAt(iso){
+  if (!iso) return 'data desconhecida';
+  const d = new Date(iso);
+  return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' });
+}
+
+function showCurrentModelBanner(run){
+  document.getElementById('currentModelSection').style.display = 'block';
+  document.getElementById('cmStatus').innerHTML =
+    `Modelo treinado em <b>${fmtTrainedAt(run.trainedAt)}</b>, com histórico até <b>${ymLabelLong(run.histMax)}</b> · ` +
+    `${fmtInt(run.nCombos)} combos · MAE 30d = ${fmtNum(run.h1.perf.mae,1)} · MAE 60d = ${fmtNum(run.h2.perf.mae,1)}. ` +
+    `Você pode gerar uma previsão nova com uma base atualizada sem retreinar, ou treinar um modelo do zero.`;
+}
+
+let quickUploadedFile = null;
+const cmQuickBtn = document.getElementById('cmQuickBtn');
+const cmRetrainBtn = document.getElementById('cmRetrainBtn');
+const cmQuickUpload = document.getElementById('cmQuickUpload');
+const cmDropzone = document.getElementById('cmDropzone');
+const cmFileInput = document.getElementById('cmFileInput');
+const cmFileNamePill = document.getElementById('cmFileNamePill');
+const cmRunBtn = document.getElementById('cmRunBtn');
+const cmErrBox = document.getElementById('cmErrBox');
+const cmStatusText = document.getElementById('cmStatusText');
+
+cmQuickBtn.addEventListener('click', () => {
+  cmQuickUpload.style.display = cmQuickUpload.style.display === 'none' ? 'block' : 'none';
+});
+cmRetrainBtn.addEventListener('click', () => {
+  document.getElementById('uploadSection').scrollIntoView({ behavior:'smooth', block:'start' });
+});
+
+function setQuickFile(file){
+  if (!file) return;
+  if (!/\.(xlsx|xls)$/i.test(file.name)){
+    cmErrBox.textContent = 'Formato não reconhecido. Envie um arquivo .xlsx ou .xls.';
+    return;
+  }
+  cmErrBox.textContent = '';
+  quickUploadedFile = file;
+  cmFileNamePill.innerHTML = `<span class="filename-pill"><span class="dot"></span>${file.name}</span>`;
+  cmRunBtn.disabled = false;
+}
+cmDropzone.addEventListener('click', ()=> cmFileInput.click());
+cmDropzone.addEventListener('dragover', e => { e.preventDefault(); cmDropzone.classList.add('drag'); });
+cmDropzone.addEventListener('dragleave', ()=> cmDropzone.classList.remove('drag'));
+cmDropzone.addEventListener('drop', e => {
+  e.preventDefault(); cmDropzone.classList.remove('drag');
+  if (e.dataTransfer.files.length) setQuickFile(e.dataTransfer.files[0]);
+});
+cmFileInput.addEventListener('change', e => { if (e.target.files.length) setQuickFile(e.target.files[0]); });
+
+cmRunBtn.addEventListener('click', async () => {
+  if (!quickUploadedFile || !lastRun) return;
+  cmErrBox.textContent = '';
+  cmRunBtn.disabled = true;
+  cmStatusText.textContent = 'Lendo arquivo…';
+  progressSection.style.display = 'block';
+  updateProgress('Lendo arquivo…', 0);
+  try {
+    const { stockRaw, cartasRaw, contratosRaw, classRaw } = await parseFile(quickUploadedFile);
+    const newRun = await quickForecastWithModel(stockRaw, cartasRaw, contratosRaw, classRaw, lastRun, updateProgress);
+    renderResults(newRun);
+    showCurrentModelBanner(newRun);
+    cmStatusText.textContent = 'Previsão atualizada com sucesso (modelo não foi retreinado).';
+    window.scrollTo({ top: 0, behavior:'smooth' });
+  } catch (err) {
+    console.error(err);
+    cmErrBox.textContent = 'Erro ao processar o arquivo:\n' + err.message;
+    cmStatusText.textContent = '';
+  } finally {
+    progressSection.style.display = 'none';
+    cmRunBtn.disabled = false;
+  }
+});
+
+/* ======================================================================
+   BOOTSTRAP — carrega o modelo pré-treinado embutido no pacote, se houver
+   ====================================================================== */
+if (typeof EMBEDDED_RUN !== 'undefined' && EMBEDDED_RUN){
+  try {
+    const preloadedRun = deserializeRun(EMBEDDED_RUN);
+    renderResults(preloadedRun);
+    showCurrentModelBanner(preloadedRun);
+  } catch (e){
+    console.error('Falha ao carregar modelo pré-treinado:', e);
+  }
+}
+
+</script>
+</body>
+</html>

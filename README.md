@@ -16,6 +16,27 @@ servidor: é só um arquivo HTML.
 - Aponta os 10 combos de empresa/regional/SKU/fornecedor com maior erro de previsão no histórico,
   para revisão manual.
 - Exporta tudo em Excel (.xlsx) e CSV.
+- **O `index.html` deste pacote já vem com um modelo treinado** (na data em que foi gerado) — quem
+  abrir o link já vê a previsão na hora, sem precisar treinar nada.
+
+## Modelo pré-treinado: os dois botões no topo
+
+O `index.html` publicado já sobe com um modelo pronto. No topo da página aparecem duas opções:
+
+- **"Atualizar previsão com este modelo"** — suba uma base mais recente e a aplicação gera uma
+  previsão nova em segundos, usando as mesmas árvores já treinadas (não retreina nada). É o uso do
+  dia a dia: rodar de novo com o mês mais recente.
+- **"Treinar um modelo novo do zero"** — leva até a seção de treino completo de sempre, para quando
+  você quiser ajustar variáveis, hiperparâmetros, ou simplesmente treinar do zero com uma base bem
+  diferente da original. Esse retreino leva 1–2 minutos e roda só naquela sessão do navegador (não
+  atualiza o `index.html` publicado — para isso, veja "Atualizando o modelo publicado" abaixo).
+
+## Atualizando o modelo publicado
+
+O modelo embutido no `index.html` fica desatualizado com o tempo (treinado só até a data em que foi
+gerado). Para publicar uma versão com um modelo mais novo, peça para o Claude gerar um novo
+`index.html` a partir de uma base atualizada — o processo de treino e embutir o modelo é feito nos
+bastidores, o arquivo final já sai pronto para subir no repositório.
 
 ## Como hospedar no GitHub Pages
 
